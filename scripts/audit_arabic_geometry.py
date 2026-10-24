@@ -19,7 +19,7 @@ from tests.make_samples import H
 BASELINES = {"invoice_no": 96, "patient_invoice": 128, "invoice_total": 238,
              "item1": 200, "item2": 215, "patient_rx": 96,
              "medicine1": 134, "medicine2": 150}
-TOLERANCE_PT = 22
+TOLERANCE_PT = 8
 EXPANDED = {"invoice_eastern.pdf": "invoice_shaped.pdf",
             "invoice_diacritics.pdf": "invoice_shaped.pdf",
             "prescription_logical.pdf": "prescription_shaped.pdf"}
