@@ -1,0 +1,89 @@
+name: MDIA 300 NEW medical invoice holdout - real OCR benchmark
+on:
+  push:
+    branches:
+      - experiment/mdia-invoice-benchmark-300
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  invoice-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+      - name: Install OCR dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Existing regressions, independent 300 fixture invariants and Arabic PDF diagnostic
+        run: |
+          python -m compileall -q mdia scripts tests
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+          python - <<'PY'
+          from scripts.benchmark_invoice300 import all_cases
+          a=all_cases()
+          assert len(a)==300
+          assert len({x['id'] for x in a})==300
+          assert len({x['invoice_number'] for x in a})==300
+          print('300 new holdout cases / 6 layouts / 6 image modes')
+          PY
+      - name: Actual OCR run — 50 unseen PDFs with Tesseract, Paddle, enhanced Paddle
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines tesseract paddle_arabic paddle_arabic_enhanced \
+            --output-dir results/invoice_benchmark300_shard${{ matrix.shard }}
+      - name: Print full errors and strict metrics
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          for p in Path('results').glob('invoice_benchmark300_shard*/results.json'):
+              x=json.loads(p.read_text())
+              print('RESULT STATUS', x['status'], 'shard', x['shard'], 'docs', x['cases'])
+              for k,v in x.get('summary',{}).items():
+                  print('ENGINE',k,v)
+              for err in x.get('failure_records',[])[:10]:
+                  print('OCR ERROR:', err['case'], err.get('runtime_error'))
+              assert x['status']=='completed_real_ocr', 'Incomplete benchmark: reject false success'
+          PY
+      - name: Synthetic page thumbnails
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pypdfium2
+          for folder in Path('results').glob('invoice_benchmark300_shard*'):
+              for pdf in sorted((folder/'pdfs').glob('*.pdf'))[:3]:
+                  try:
+                      p = pypdfium2.PdfDocument(str(pdf))
+                      im = p[0].render(scale=1).to_pil()
+                      im.save(folder / (pdf.stem+'_preview.png'))
+                  except Exception as exc:
+                      print('PREVIEW ERROR',pdf.name,repr(exc))
+          PY
+      - name: Save PDFs, ground truth and 150 full extraction results per shard
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdia-invoice300-shard${{ matrix.shard }}
+          path: |
+            results/invoice_benchmark300_shard${{ matrix.shard }}/
+          retention-days: 30
+          if-no-files-found: error
