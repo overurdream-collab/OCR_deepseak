@@ -1,4 +1,4 @@
-name: MDIA free Paddle document layout model — Arabic invoice pilot
+name: MDIA table-specific PicoDet layout detector — Arabic invoice pilot
 on:
   push:
     branches:
@@ -30,10 +30,10 @@ jobs:
       - name: Validate adapter with no model
         run: |
           python -m unittest tests.test_paddle_layout -v
-      - name: Execute PP-DocLayout-S real CPU inference on six synthetic PDFs
+      - name: Execute PicoDet table model real CPU inference on six synthetic PDFs
         run: |
           python -u -m scripts.ai_paddle_layout_pilot \
-            --shard ${{ matrix.shard }} --shards 2 \
+            --shard ${{ matrix.shard }} --shards 2 --model PicoDet_layout_1x_table \
             --output-dir results/paddle_layout_shard${{ matrix.shard }}
       - name: Show explicit result
         if: always()
@@ -50,7 +50,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: mdia-paddle-layout-shard${{ matrix.shard }}
+          name: mdia-picodet-table-shard${{ matrix.shard }}
           path: results/paddle_layout_shard${{ matrix.shard }}/
           retention-days: 30
           if-no-files-found: warn
