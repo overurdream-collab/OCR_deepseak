@@ -25,6 +25,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
       - name: Existing Arabic OCR environment diagnostic
         run: python -m mdia.doctor
+      - name: Full pipeline Tesseract structured baseline (synthetic only)
+        run: |
+          python -m scripts.compare_structured_arabic --engines tesseract --output results/arabic_structured_tesseract.json
   live-paddle-benchmark:
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -47,10 +50,17 @@ jobs:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
         run: |
           python -m scripts.compare_arabic_ocr --output results/paddle_arabic_vs_tesseract.json
+      - name: Compare structured invoice fields, medicines, row amounts and evidence
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: |
+          python -m scripts.compare_structured_arabic --engines tesseract paddle_arabic --output results/arabic_structured_comparison.json
       - name: Attach raw OCR results, including explicit failure state
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: paddle-arabic-synthetic-comparison
-          path: results/paddle_arabic_vs_tesseract.json
+          path: |
+            results/paddle_arabic_vs_tesseract.json
+            results/arabic_structured_comparison.json
           if-no-files-found: warn
