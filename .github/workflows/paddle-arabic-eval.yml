@@ -60,6 +60,22 @@ jobs:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
         run: |
           python -m scripts.audit_arabic_geometry --engines tesseract paddle_arabic --output results/arabic_geometry_audit.json --image-dir results/geometry_overlays
+      - name: EVIDENCE-01 optional secondary word localization (no OCR text fallback)
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+          MDIA_PADDLE_WORD_ALIGN: '1'
+        run: |
+          python -m scripts.audit_arabic_geometry --engines paddle_arabic --output results/arabic_evidence01_aligned.json --image-dir results/evidence01_overlays
+          python - <<'PY'
+          import json
+          base = json.load(open('results/arabic_geometry_audit.json'))
+          new = json.load(open('results/arabic_evidence01_aligned.json'))
+          a, b = base['summary']['paddle_arabic'], new['summary']['paddle_arabic']
+          print('BASELINE', a)
+          print('WORD_CORRELATION_OPT_IN', b)
+          assert base['status'] == new['status'] == 'completed_synthetic_position_audit'
+          assert a['matching_values'] == b['matching_values'], 'secondary OCR changed recognized field values'
+          PY
       - name: Attach raw OCR results, including explicit failure state
         if: always()
         uses: actions/upload-artifact@v4
@@ -70,4 +86,6 @@ jobs:
             results/arabic_structured_comparison.json
             results/arabic_geometry_audit.json
             results/geometry_overlays/*.png
+            results/arabic_evidence01_aligned.json
+            results/evidence01_overlays/*.png
           if-no-files-found: warn
