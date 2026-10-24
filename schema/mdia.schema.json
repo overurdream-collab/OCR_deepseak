@@ -181,6 +181,17 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "geometry_source": {
+          "enum": [
+            "pdf_text",
+            "tesseract_word",
+            "line_interpolated",
+            "cross_engine_word_match"
+          ]
+        },
+        "word_box_verified": {
+          "type": "boolean"
         }
       }
     },
