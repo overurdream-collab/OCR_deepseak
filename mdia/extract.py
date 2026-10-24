@@ -463,12 +463,23 @@ class Extractor:
                         if directions:
                             name_part = name_part[:directions.start()]
                     name = name_part.strip(" -:,;.")
+                    list_number_removed = False
+                    if p.method == "ocr" and not explicit_rx:
+                        # OCR may read an Arabic list marker as ١٠ or ٢٠.
+                        # Remove only a digit-only prefix before an Arabic name;
+                        # do not guess its ordinal or a dosage.
+                        marker = re.fullmatch(r"[0-9٠-٩]{1,2}[.)]?\s+(.+)", name)
+                        if marker and has_ar(marker.group(1)):
+                            name = marker.group(1).strip()
+                            list_number_removed = True
                     if not name or len(name) > 80:
                         continue
                     if not explicit_rx and not (FORM_RE.search(txt) or FREQ_RE.search(txt)):
                         continue
                     ws = ln.words
-                    name_f = self.ctx.field(p, ws, raw=name, source=ln.text, mult=0.8, note="free_text_line")
+                    name_f = self.ctx.field(p, ws, raw=name, source=ln.text,
+                                            mult=0.64 if list_number_removed else 0.8,
+                                            note="ocr_list_prefix_removed_needs_review" if list_number_removed else "free_text_line")
                     str_f = (self.ctx.field(p, ws, raw=m.group(0), source=ln.text, mult=0.8)
                              if m else _nf())
 
