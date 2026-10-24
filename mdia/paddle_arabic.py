@@ -130,7 +130,8 @@ def result_to_words(result, image_size):
                 x1 = box[0] + (box[2] - box[0]) * b
                 # The box field is deliberately unset: it would falsely imply
                 # an independently localized word. Position is an estimate.
-                words.append(Word(tok, x0, box[1], x1, box[3], confidence, 'ocr', rtl_hint=rtl))
+                words.append(Word(tok, x0, box[1], x1, box[3], confidence, 'ocr', rtl_hint=rtl,
+                                  geometry_source="line_interpolated"))
                 consumed += len(tok) + 1
     return words
 
@@ -143,4 +144,10 @@ def ocr_image(image):
         raise RuntimeError('numpy is required for PaddleOCR inference') from exc
     image = image.convert('RGB')
     output = _load_model().predict(np.asarray(image))
-    return result_to_words(output, image.size)
+    words = result_to_words(output, image.size)
+    # Explicit opt-in only: no silent secondary-OCR fallback or text replacement.
+    import os
+    if os.environ.get("MDIA_PADDLE_WORD_ALIGN", "0") == "1":
+        from .word_localization import align_with_tesseract
+        return align_with_tesseract(image, words)
+    return words
