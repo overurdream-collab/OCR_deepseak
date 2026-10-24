@@ -9,7 +9,7 @@ class PaddleLayoutTest(unittest.TestCase):
             {"label":"text","score":.99,"coordinate":[12,30,50,60]},
             {"label":"table","score":.25,"coordinate":[10,20,210,165]}
         ]}}
-        out=normalized_tables(pred,(400,400))
+        out=normalized_tables(pred,(400,400),confidence_threshold=.35)
         self.assertEqual(len(out),1)
         self.assertEqual(out[0]["bbox"],[.025,.05,.5,.4])
         self.assertIs(out[0]["pixel_ground_truth"],False)
