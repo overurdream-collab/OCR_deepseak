@@ -1,6 +1,7 @@
 """Deterministic validation. Never edits an extracted value: it only adds warnings, upgrades
 verification status when independent checks agree, and builds the human-review queue."""
 import datetime
+import os
 from decimal import Decimal
 
 from . import config
@@ -150,6 +151,30 @@ def validate_document(doc: dict):
         for it in items:
             for field in ("service_name", "quantity", "unit_price", "line_total"):
                 _flag(it[field], "unverified_table_layout")
+
+    # Strict opt-in financial completeness review for OCR-benchmark candidate.
+    # Never fills in or silently calculates missing prices/quantities.
+    if os.environ.get("MDIA_STRICT_INVOICE_REVIEW", "0") == "1" and inv:
+        incomplete = []
+        for it in items:
+            missing = [k for k in ("service_name", "quantity", "unit_price", "line_total")
+                       if it[k]["status"] != "extracted" or it[k].get("value") is None]
+            if not missing:
+                continue
+            incomplete.append(it["id"])
+            _warn(doc, "incomplete_invoice_item",
+                  f"بيانات مالية ناقصة في بند {it['id']}: {', '.join(missing)} / invoice item missing evidence-backed values",
+                  "warning", record_id=it["id"], missing_fields=missing,
+                  evidence_ids=_ids(*(it[k] for k in ("service_name", "quantity", "unit_price", "line_total"))))
+            for key in ("service_name", "quantity", "unit_price", "line_total"):
+                if key in missing:
+                    _flag(it[key], "incomplete_invoice_item")
+        if incomplete:
+            _flag(inv["invoice_total"], "incomplete_invoice_items")
+            _warn(doc, "invoice_total_needs_completeness_review",
+                  "الإجمالي لا يثبت اكتمال بنود الفاتورة / reported total cannot prove missing items are complete",
+                  "warning", record_id=inv["id"], incomplete_item_ids=incomplete,
+                  evidence_ids=_ids(inv["invoice_total"]))
 
     # 3) probable duplicates (kept, only flagged: repetition is not proof of double billing)
     seen = {}

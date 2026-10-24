@@ -185,6 +185,7 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
         raise ValueError(f"Unsupported MDIA_OCR_ENGINE: {engine}")
     use_paddle = engine == "paddle_arabic"
     align_words = use_paddle and os.environ.get("MDIA_PADDLE_WORD_ALIGN", "0") == "1"
+    image_enhance = use_paddle and os.environ.get("MDIA_OCR_IMAGE_ENHANCE", "0") == "1"
     n_pages = check_pdf(pdf_path)
     pages_dir = work_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +193,7 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
     use_lang = "+".join(l for l in lang.split("+") if l in langs) or ("eng" if "eng" in langs else lang)
     ar_missing = "ara" in lang and "ara" not in langs
     # Avoid cross-engine cache pollution when switching OCR engines.
-    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}|{engine}|{('arabic_PP-OCRv5_mobile_rec' if use_paddle else 'tesseract')}|align={int(align_words)}".encode()).hexdigest()[:8]
+    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}|{engine}|{('arabic_PP-OCRv5_mobile_rec' if use_paddle else 'tesseract')}|align={int(align_words)}|enhance={int(image_enhance)}".encode()).hexdigest()[:8]
     pages = []
     pdfium_doc = pdfium.PdfDocument(str(pdf_path))
     with pdfplumber.open(str(pdf_path)) as plumb:
@@ -243,11 +244,23 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
                         if abs(angle) >= 0.4:
                             from PIL import Image
                             rot = big.convert("L").rotate(angle, resample=Image.BICUBIC, fillcolor=255)
-                            page.words, page.method = selected_ocr(rot), "ocr"
-                            _to_original_space(page.words, angle, *rot.size)
+                            ocr_input = rot
                             page.flags["deskew_deg"] = angle
                         else:
-                            page.words, page.method = selected_ocr(big), "ocr"
+                            ocr_input = big
+                        if image_enhance:
+                            # Opt-in experimental repair for faint/blurred scans only.
+                            # Pixel dimensions stay unchanged, preserving source geometry.
+                            from PIL import ImageOps, ImageFilter
+                            ocr_input = ImageOps.autocontrast(ocr_input.convert("RGB"), cutoff=1)
+                            ocr_input = ocr_input.filter(
+                                ImageFilter.UnsharpMask(radius=1.2, percent=180, threshold=2))
+                            page.flags["ocr_image_enhanced"] = True
+                            page.warnings.append({"kind": "experimental_image_enhancement",
+                                "message": "Opt-in OCR image enhancement applied; verify text and source evidence"})
+                        page.words, page.method = selected_ocr(ocr_input), "ocr"
+                        if abs(angle) >= 0.4:
+                            _to_original_space(page.words, angle, *ocr_input.size)
                         page.flags["ocr_lang"] = "arabic+english (Paddle PP-OCRv5)" if use_paddle else use_lang
                         if use_paddle:
                             page.flags["word_alignment_opt_in"] = align_words
