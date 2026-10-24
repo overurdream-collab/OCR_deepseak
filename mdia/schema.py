@@ -53,7 +53,9 @@ def build():
                          "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4,
                                   "description": "[x0,y0,x1,y1] relative to page width/height, origin top-left"},
                          "bboxes": {"type": "array", "items": {"type": "array", "items": {"type": "number"}}},
-                         "method": {"enum": ["text-layer", "ocr"]}, "confidence": {"type": "number", "minimum": 0, "maximum": 1}}}
+                         "method": {"enum": ["text-layer", "ocr"]}, "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                         "geometry_source": {"enum": ["pdf_text", "tesseract_word", "line_interpolated", "cross_engine_word_match"]},
+                         "word_box_verified": {"type": "boolean"}}}
     warn = {"type": "object", "required": ["id", "kind", "severity", "message"],
             "properties": {"id": {"type": "string"}, "kind": {"type": "string"}, "severity": {"enum": ["info", "warning", "error"]},
                            "message": {"type": "string"}}}
