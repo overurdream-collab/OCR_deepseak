@@ -75,7 +75,19 @@ class Ctx:
         conf = sum(w.conf for w in words) / len(words)
         conf = conf * (0.97 if page.method == "text-layer" else 0.95)
         eid = f"{self.doc_id}-ev{len(self.evidence) + 1}"
+        if page.flags.get("ocr_engine") == "paddleocr-v5-arabic":
+            # Some fields pass the whole source line. Never tag these as
+            # precisely word-localized even if the second OCR matched tokens.
+            selected = join_words(sorted(words, key=lambda w: w.x0),
+                                  ar_ratio(" ".join(w.text for w in words)) > 0.5)
+            exact_scope = match_key(selected) == match_key(raw)
+            geometry_source = ("cross_engine_word_match"
+                               if exact_scope and all(w.geometry_source == "cross_engine_word_match" for w in words)
+                               else "line_interpolated")
+        else:
+            geometry_source = "pdf_text" if page.method == "text-layer" else "tesseract_word"
         self.evidence.append({
+            "geometry_source": geometry_source, "word_box_verified": False,
             "id": eid, "document_id": self.doc_id, "page": page.number, "text": source, "matched_text": raw,
             "bbox": bbox, "bboxes": boxes or [bbox], "method": page.method, "confidence": round(conf * mult, 3)})
         self._ev_index[key] = eid
