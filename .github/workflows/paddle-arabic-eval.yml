@@ -55,6 +55,11 @@ jobs:
           PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
         run: |
           python -m scripts.compare_structured_arabic --engines tesseract paddle_arabic --output results/arabic_structured_comparison.json
+      - name: Audit original-page Arabic evidence positions (synthetic only)
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: |
+          python -m scripts.audit_arabic_geometry --engines tesseract paddle_arabic --output results/arabic_geometry_audit.json --image-dir results/geometry_overlays
       - name: Attach raw OCR results, including explicit failure state
         if: always()
         uses: actions/upload-artifact@v4
@@ -63,4 +68,6 @@ jobs:
           path: |
             results/paddle_arabic_vs_tesseract.json
             results/arabic_structured_comparison.json
+            results/arabic_geometry_audit.json
+            results/geometry_overlays/*.png
           if-no-files-found: warn
