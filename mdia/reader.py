@@ -181,6 +181,7 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
     if engine not in ("tesseract", "paddle_arabic"):
         raise ValueError(f"Unsupported MDIA_OCR_ENGINE: {engine}")
     use_paddle = engine == "paddle_arabic"
+    align_words = use_paddle and os.environ.get("MDIA_PADDLE_WORD_ALIGN", "0") == "1"
     n_pages = check_pdf(pdf_path)
     pages_dir = work_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
@@ -188,7 +189,7 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
     use_lang = "+".join(l for l in lang.split("+") if l in langs) or ("eng" if "eng" in langs else lang)
     ar_missing = "ara" in lang and "ara" not in langs
     # Avoid cross-engine cache pollution when switching OCR engines.
-    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}|{engine}|{('arabic_PP-OCRv5_mobile_rec' if use_paddle else 'tesseract')}".encode()).hexdigest()[:8]
+    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}|{engine}|{('arabic_PP-OCRv5_mobile_rec' if use_paddle else 'tesseract')}|align={int(align_words)}".encode()).hexdigest()[:8]
     pages = []
     pdfium_doc = pdfium.PdfDocument(str(pdf_path))
     with pdfplumber.open(str(pdf_path)) as plumb:
@@ -245,6 +246,10 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
                         else:
                             page.words, page.method = selected_ocr(big), "ocr"
                         page.flags["ocr_lang"] = "arabic+english (Paddle PP-OCRv5)" if use_paddle else use_lang
+                        if use_paddle:
+                            page.flags["word_alignment_opt_in"] = align_words
+                            page.flags["cross_engine_word_matches"] = sum(
+                                w.geometry_source == "cross_engine_word_match" for w in page.words)
                         if page.words:
                             page.flags["ocr_mean_conf"] = round(sum(w.conf for w in page.words) / len(page.words), 3)
                         else:
