@@ -20,9 +20,9 @@ from tests import arabic_samples
 
 
 FIXTURES = {
-    'invoice_shaped.pdf': ('invoice', 'shaped', ['رقم الفاتورة', 'خالد يوسف', 'كشف استشاري', 'تحليل دم شامل', 'الكمية', '1250']),
-    'invoice_visual.pdf': ('invoice', 'visual', ['رقم الفاتورة', 'خالد يوسف', 'كشف استشاري', 'تحليل دم شامل', 'الكمية', '1250']),
-    'prescription_shaped.pdf': ('prescription', 'shaped', ['وصفة طبية', 'سارة عمر', 'أموكسيسيلين', 'باراسيتامول', '٥٠٠']),
+    'invoice_shaped.pdf': ('invoice', 'shaped', ['رقم الفاتورة', 'INV-4004', 'خالد يوسف', 'كشف استشاري', 'تحليل دم شامل', 'الكمية', '1,250.00', '75.50', '1,401.00']),
+    'invoice_visual.pdf': ('invoice', 'visual', ['رقم الفاتورة', 'INV-4004', 'خالد يوسف', 'كشف استشاري', 'تحليل دم شامل', 'الكمية', '1,250.00', '75.50', '1,401.00']),
+    'prescription_shaped.pdf': ('prescription', 'shaped', ['وصفة طبية', 'سارة عمر', 'أموكسيسيلين', 'باراسيتامول', '٥٠٠', 'مرتين يوميا', '٣ أيام']),
 }
 
 
@@ -30,6 +30,7 @@ def norm(value):
     s = unicodedata.normalize('NFKC', str(value))
     s = re.sub('[\u064B-\u065F\u0640]', '', s)
     s = s.translate(str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789'))
+    s = re.sub(r'(?<=\d),(?=\d{3}(?:[.,]|$))', '', s)  # remove grouping commas only
     return re.sub(r'\s+', '', s).lower()
 
 
