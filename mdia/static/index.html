@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MDIA — وكيل قراءة المستندات الطبية</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1b2430;--mut:#6b7686;--line:#dde3ea;--pri:#1f4e79;--ok:#1d7a46;--warn:#b26a00;--bad:#b3261e}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 "Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--pri);color:#fff;padding:8px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+header h1{font-size:16px;margin:0}button,select,input[type=file]{font:inherit}
+button{background:#fff;color:var(--pri);border:1px solid var(--pri);border-radius:6px;padding:4px 10px;cursor:pointer}
+button.p{background:var(--pri);color:#fff}header button{border-color:#fff}
+#drop{border:2px dashed #9fb3c8;border-radius:8px;padding:6px 12px;color:#dbe7f3;cursor:pointer}
+#drop.over{background:#2e6aa3}
+main{display:grid;grid-template-columns:200px 1fr 1.25fr;gap:10px;padding:10px;height:calc(100vh - 56px)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.card h2{font-size:13px;margin:0;padding:8px 10px;border-bottom:1px solid var(--line);background:#f8fafc;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.body{overflow:auto;flex:1;padding:8px}
+.job{padding:6px 8px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;cursor:pointer;font-size:12px}
+.job.sel{border-color:var(--pri);background:#eef4fb}.bar{height:5px;background:#e6ebf1;border-radius:3px;margin-top:4px}.bar i{display:block;height:100%;background:var(--pri);border-radius:3px}
+#viewer{position:relative;display:inline-block;min-width:100%}#viewer img{width:100%;display:block}
+.box{position:absolute;border:2px solid #e8590c;background:rgba(232,89,12,.18);pointer-events:none;border-radius:2px}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--line)}
+.tab{padding:3px 9px;border-radius:14px;border:1px solid var(--line);cursor:pointer;font-size:12px;background:#fff}.tab.on{background:var(--pri);color:#fff;border-color:var(--pri)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}th,td{border:1px solid var(--line);padding:3px 6px;text-align:start;vertical-align:top}th{background:#f1f5f9;position:sticky;top:0}
+td.f{cursor:pointer}td.f:hover{background:#fff7e6}td.low{background:#fff1f0}td.ok{background:#f0faf4}td.cor{background:#eef6ff;font-weight:600}td.nf{color:#aab3bf}
+.badge{font-size:10px;color:var(--mut)}.pill{display:inline-block;padding:0 6px;border-radius:9px;font-size:11px;background:#eef2f6}
+.w-error{color:var(--bad)}.w-warning{color:var(--warn)}.w-info{color:var(--mut)}
+.edit{border:none;background:none;cursor:pointer;color:var(--pri);padding:0 2px;font-size:11px}
+#msg{font-size:12px;color:#ffe9a8}
+</style>
+</head>
+<body>
+<header>
+  <h1>MDIA · وكيل قراءة المستندات الطبية</h1>
+  <label id="drop">ارفع ملفات PDF (أو اسحبها هنا)<input id="file" type="file" accept="application/pdf" multiple hidden></label>
+  <select id="ocr" title="OCR"><option value="auto">OCR تلقائي</option><option value="force">فرض OCR</option><option value="off">بدون OCR</option></select>
+  <span id="exports"></span><span id="msg"></span>
+</header>
+<main>
+  <div class="card"><h2>المهام / Jobs</h2><div class="body" id="jobs"></div></div>
+  <div class="card"><h2>المستند الأصلي
+    <button id="prev">◀</button><span id="pg">–</span><button id="next">▶</button>
+    <button id="zin">＋</button><button id="zout">－</button><a id="orig" target="_blank" style="font-size:12px">PDF</a></h2>
+    <div class="body" id="vwrap" dir="ltr"><div id="viewer"></div></div></div>
+  <div class="card"><div class="tabs" id="tabs"></div><div class="body" id="out"></div></div>
+</main>
+<script>
+const $=s=>document.querySelector(s);let TOKEN=new URLSearchParams(location.search).get('token')||'';
+const H=()=>TOKEN?{Authorization:'Bearer '+TOKEN}:{};
+let job=null,res=null,page=1,zoom=1,tab='general',evMap={},timer=null;
+const TABS=[['general','معلومات عامة'],['invoices','الفواتير'],['invoice_items','البنود'],['medications','الأدوية'],['diagnoses','التشخيصات'],
+ ['laboratory_tests','التحاليل'],['imaging','الأشعة'],['procedures','الإجراءات'],['review','مراجعة'],['warnings','تحذيرات'],['docs','المستندات']];
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const best=f=>f.corrected_value!==undefined?f.corrected_value:(f.value!==null&&f.value!==undefined?f.value:f.raw);
+async function api(p,o={}){const r=await fetch(p,{...o,headers:{...H(),...(o.headers||{})}});if(!r.ok&&r.status!==409)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r}
+function say(t){$('#msg').textContent=t;setTimeout(()=>{if($('#msg').textContent===t)$('#msg').textContent=''},6000)}
+
+async function upload(files){for(const f of files){try{const q=new URLSearchParams({filename:f.name,ocr:$('#ocr').value});
+  const r=await api('/api/upload?'+q,{method:'POST',body:f});const j=await r.json();say('رُفع: '+f.name);await loadJobs();select(j.job_id)}catch(e){say('فشل الرفع: '+e.message)}}}
+$('#file').onchange=e=>upload([...e.target.files]);
+const d=$('#drop');d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
+d.ondrop=e=>{e.preventDefault();d.classList.remove('over');upload([...e.dataTransfer.files].filter(f=>/pdf$/i.test(f.type||f.name)))};
+
+async function loadJobs(){const l=await (await api('/api/jobs')).json();
+  $('#jobs').innerHTML=l.map(j=>`<div class="job ${job===j.job_id?'sel':''}" onclick="select('${j.job_id}')"><b>${esc(j.filename)}</b><br>
+  <span class="pill">${j.state}</span> <span class="badge">${esc(j.stage||'')}</span>${j.error?`<div class="w-error">${esc(j.error)}</div>`:''}
+  <div class="bar"><i style="width:${Math.round((j.progress||0)*100)}%"></i></div></div>`).join('')||'<span class="badge">لا مهام</span>';
+  return l}
+async function select(id){job=id;page=1;res=null;clearInterval(timer);await refresh();
+  timer=setInterval(async()=>{const l=await loadJobs();const j=l.find(x=>x.job_id===job);if(j&&(j.state==='done'||j.state==='failed')){clearInterval(timer);await refresh()}},1500)}
+async function refresh(){await loadJobs();const r=await api(`/api/jobs/${job}/result`);if(r.status===200){res=await r.json();
+  evMap={};res.documents.forEach(d=>d.evidence.forEach(e=>evMap[e.id]=e));exportsUI();$('#orig').href=`/api/jobs/${job}/pdf`+(TOKEN?'?token='+TOKEN:'');}
+  else res=null;show();draw()}
+function exportsUI(){$('#exports').innerHTML=['json','csv','xlsx','pdf'].map(f=>`<button onclick="dl('${f}')">${f.toUpperCase()}</button>`).join(' ')+
+  ` <button onclick="reproc()">إعادة المعالجة (OCR)</button>`}
+async function dl(f){try{const r=await api(`/api/jobs/${job}/export?format=${f}`);const b=await r.blob();const a=document.createElement('a');
+  a.href=URL.createObjectURL(b);a.download=`mdia_${job}.${f==='csv'?'zip':f}`;a.click()}catch(e){say('فشل التصدير: '+e.message)}}
+async function reproc(){await api(`/api/jobs/${job}/reprocess`,{method:'POST',body:JSON.stringify({ocr:'force'})});select(job)}
+
+function draw(ev){const v=$('#viewer');if(!job){v.innerHTML='';return}
+  const n=(res?res.source.pages:1);$('#pg').textContent=`${page} / ${n}`;
+  v.style.width=(zoom*100)+'%';
+  let h=`<img src="/api/jobs/${job}/pages/${page}.png${TOKEN?'?token='+TOKEN:''}" onerror="this.alt='(الصورة غير جاهزة بعد)'">`;
+  if(ev&&ev.page===page)for(const b of ev.bboxes||[ev.bbox])h+=`<div class="box" style="left:${b[0]*100}%;top:${b[1]*100}%;width:${(b[2]-b[0])*100}%;height:${(b[3]-b[1])*100}%"></div>`;
+  v.innerHTML=h;const bx=v.querySelector('.box');if(bx)bx.scrollIntoView({block:'center',inline:'center',behavior:'smooth'})}
+$('#prev').onclick=()=>{if(page>1){page--;draw()}};$('#next').onclick=()=>{if(res&&page<res.source.pages){page++;draw()}};
+$('#zin').onclick=()=>{zoom=Math.min(4,zoom+.25);draw()};$('#zout').onclick=()=>{zoom=Math.max(.5,zoom-.25);draw()};
+function focusEv(id){const e=evMap[id];if(!e)return;page=e.page;draw(e);$('#msg').textContent=`المصدر: ص${e.page} · ${e.method} · ثقة ${e.confidence} — "${e.text.slice(0,70)}"`}
+async function edit(rec,field,cur){const v=prompt(`تصحيح ${field}\n(المستند الأصلي والقيمة المستخرجة لا يتغيران)`,cur??'');if(v===null)return;
+  await api(`/api/jobs/${job}/corrections`,{method:'POST',body:JSON.stringify({record_id:rec,field,value:v,note:'manual'})});await refresh()}
+async function undo(rec,field){await api(`/api/jobs/${job}/corrections?record_id=${encodeURIComponent(rec)}&field=${field}`,{method:'DELETE'});await refresh()}
+
+function cell(rec,k,f){if(!f||typeof f!=='object'||!('status' in f))return '';
+  if(f.status==='not_found'&&f.corrected_value===undefined)return `<td class="nf">—<button class="edit" onclick="edit('${rec}','${k}','')">✎</button></td>`;
+  const cls=f.verification==='corrected'?'cor':(f.verification==='needs_review'?'low':(f.verification==='auto_verified'?'ok':''));
+  const tip=`ثقة ${f.confidence} · ${f.verification}${f.review_reasons?' · '+f.review_reasons.join(','):''}${f.raw!==best(f)?' · الأصل: '+f.raw:''}`;
+  return `<td class="f ${cls}" dir="auto" title="${esc(tip)}" onclick="focusEv('${f.evidence_id}')">${esc(best(f))}
+   <span class="badge">${f.confidence}</span><button class="edit" onclick="event.stopPropagation();edit('${rec}','${k}',${esc(JSON.stringify(String(best(f)??'')))})">✎</button>
+   ${f.verification==='corrected'?`<button class="edit" onclick="event.stopPropagation();undo('${rec}','${k}')">↺</button>`:''}</td>`}
+function tbl(rows,cols){if(!rows.length)return '<span class="badge">لا يوجد</span>';
+  return `<table><tr><th>doc</th>${cols.map(c=>`<th>${c}</th>`).join('')}</tr>${rows.map(r=>`<tr><td>${r.doc}</td>${cols.map(c=>cell(r.id,c,r.rec[c])).join('')}</tr>`).join('')}</table>`}
+function cols(list){const s=new Set();list.forEach(r=>Object.entries(r.rec).forEach(([k,v])=>{if(v&&typeof v==='object'&&'status' in v)s.add(k)}));return [...s]}
+function show(){$('#tabs').innerHTML=TABS.map(([k,n])=>`<span class="tab ${tab===k?'on':''}" onclick="tab='${k}';show()">${n}</span>`).join('');
+  const o=$('#out');if(!job){o.innerHTML='<span class="badge">ارفع ملف PDF للبدء</span>';return}
+  if(!res){o.innerHTML='<span class="badge">جارٍ المعالجة… / processing…</span>';return}
+  const docs=res.documents;const short=d=>'d'+d.document_id.split('-d')[1];
+  if(tab==='docs'){o.innerHTML=`<table><tr><th>doc</th><th>النوع</th><th>الصفحات</th><th>الحالة</th><th>ثقة التصنيف</th></tr>${docs.map(d=>`<tr><td>${short(d)}</td><td>${d.document_type}</td><td>${d.pages.join(',')}</td><td>${d.processing_status}</td><td>${d.document_type_confidence??''}</td></tr>`).join('')}</table>
+   ${res.document_links.length?'<h4>روابط بين المستندات</h4>'+res.document_links.map(l=>`<div>${l.from} ⇄ ${l.to} · ${l.type} · ${l.basis}</div>`).join(''):''}`;return}
+  if(tab==='general'){let rows='';docs.forEach(d=>['patient','provider','hospitalization'].forEach(g=>Object.entries(d[g]||{}).forEach(([k,f])=>{
+     rows+=`<tr><td>${short(d)}</td><td>${g}</td><td>${k}</td>${cell(d.document_id+':'+g,k,f)}</tr>`})));
+    o.innerHTML=`<table><tr><th>doc</th><th></th><th>الحقل</th><th>القيمة</th></tr>${rows}</table>`;return}
+  if(tab==='review'){const q=docs.flatMap(d=>d.requires_human_review.map(x=>({...x,doc:short(d)})));
+    o.innerHTML=q.length?`<table><tr><th>doc</th><th>السجل</th><th>الحقل</th><th>القيمة</th><th>ثقة</th><th>السبب</th></tr>${q.map(x=>`<tr><td>${x.doc}</td><td>${x.record_id.split('-').slice(-1)[0]}</td><td>${x.field}</td>
+      <td class="f low" dir="auto" onclick="focusEv('${x.evidence_id}')">${esc(x.raw??'—')}<button class="edit" onclick="event.stopPropagation();edit('${x.record_id}','${x.field}','${esc(x.raw??'')}')">✎</button></td><td>${x.confidence}</td><td>${esc((x.reasons||[]).join(', '))}</td></tr>`).join('')}</table>`:'<span class="badge">لا توجد حقول تتطلب مراجعة ✓</span>';return}
+  if(tab==='warnings'){const w=docs.flatMap(d=>d.warnings.map(x=>({...x,doc:short(d)})));
+    o.innerHTML=w.length?w.map(x=>`<div class="w-${x.severity}">[${x.doc}] <b>${x.kind}</b> — ${esc(x.message)} ${(x.evidence_ids||[]).filter(Boolean).map(e=>`<a href="#" onclick="focusEv('${e}');return false">↗</a>`).join(' ')}</div>`).join(''):'<span class="badge">لا تحذيرات</span>';return}
+  const rows=docs.flatMap(d=>d[tab].map(rec=>({doc:short(d),id:rec.id,rec})));o.innerHTML=tbl(rows,cols(rows))}
+api('/api/health').then(r=>r.json()).then(h=>{if(!h.ocr_languages.includes('ara'))$('#msg').textContent='⚠ نموذج OCR العربي (ara) غير مثبت: الملفات الممسوحة العربية لن تُقرأ بدقة. شغّل: python -m mdia.doctor'}).catch(()=>{});
+loadJobs().then(l=>{if(l.length)select(l[0].job_id);else show()});
+</script>
+</body>
+</html>
