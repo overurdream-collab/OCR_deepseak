@@ -13,7 +13,7 @@ The previous structured extraction comparison found **29/30** field values with 
 ## Added verification
 - `scripts/audit_arabic_geometry.py` renders original synthetic PDFs and draws all available field-evidence rectangles.
 - **Blue:** expected source-row center, derived independently from the synthetic PDF generator's authored line layout.
-- **Green:** extracted value agrees with the synthetic reference **and** the center of its evidence is within 22 PDF points of the expected row.
+- **Green:** extracted value agrees with the synthetic reference **and** the center of its evidence is within 8 PDF points of the expected row.
 - **Red:** a value mismatch or incorrect source row; missing boxes are counted as missing and not falsely shown as correct.
 - Six Arabic fixtures: two original invoices (shaped/visual), original prescription, and three further variations (Eastern Arabic numerals, diacritics, logically-ordered Arabic prescription).
 - `tests/test_arabic_geometry_audit.py` checks wrong-page evidence, missing/invalid rectangles, wrong-row placement, and mismatched invoice values.
