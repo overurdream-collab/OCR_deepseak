@@ -319,10 +319,12 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                     jid = store.create(pdf.name, pdf.read_bytes())
                     old_engine, old_align = os.environ.get("MDIA_OCR_ENGINE"), os.environ.get("MDIA_PADDLE_WORD_ALIGN")
                     old_enhance = os.environ.get("MDIA_OCR_IMAGE_ENHANCE")
+                    old_review = os.environ.get("MDIA_STRICT_INVOICE_REVIEW")
                     try:
                         os.environ["MDIA_OCR_ENGINE"] = "paddle_arabic" if engine == "paddle_arabic_enhanced" else engine
                         os.environ["MDIA_PADDLE_WORD_ALIGN"] = "0"
                         os.environ["MDIA_OCR_IMAGE_ENHANCE"] = "1" if engine == "paddle_arabic_enhanced" else "0"
+                        os.environ["MDIA_STRICT_INVOICE_REVIEW"] = "1" if engine == "paddle_arabic_enhanced" else "0"
                         result = process_job(store, jid, ocr_mode="force")
                     finally:
                         if old_engine is None: os.environ.pop("MDIA_OCR_ENGINE", None)
@@ -331,11 +333,14 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                         else: os.environ["MDIA_PADDLE_WORD_ALIGN"] = old_align
                         if old_enhance is None: os.environ.pop("MDIA_OCR_IMAGE_ENHANCE", None)
                         else: os.environ["MDIA_OCR_IMAGE_ENHANCE"] = old_enhance
+                        if old_review is None: os.environ.pop("MDIA_STRICT_INVOICE_REVIEW", None)
+                        else: os.environ["MDIA_STRICT_INVOICE_REVIEW"] = old_review
                     flags = []
                     for fp in store.path(jid, "pages").glob("*.json"):
                         flags.append(json.loads(fp.read_text("utf-8")).get("flags", {}))
                     record = score_record(c, result, engine, flags)
                     record["printed_discrepancy"] = c["printed_discrepancy"]
+                    record["ocr_enhancement"] = engine == "paddle_arabic_enhanced"
                     record["arithmetic_warnings"] = sorted({w.get("kind") for d in (result or {}).get("documents", []) for w in d.get("warnings", []) if ("mismatch" in w.get("kind", "") or "invoice_item" in w.get("kind", ""))})
                     if result is None or record["page_failures"]:
                         record["runtime_error"] = store.status(jid).get("error", "page failed")
@@ -355,6 +360,8 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                 "expected_items": sum(x["expected_item_rows"] for x in group),
                 "matched_item_names": sum(x["matched_item_names"] for x in group),
                 "extra_item_rows": sum(x["extra_item_rows"] for x in group),
+                "financial_mismatch_warnings": sum(bool(x.get("arithmetic_warnings")) for x in group),
+                "incomplete_invoice_item_warnings": sum("incomplete_invoice_item" in x.get("arithmetic_warnings", []) for x in group),
                 "failures": sum(bool(x.get("runtime_error")) for x in group),
             }
         layouts = defaultdict(dict)
