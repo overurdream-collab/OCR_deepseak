@@ -160,6 +160,8 @@ def run(output, image_dir, engines=("tesseract", "paddle_arabic")):
                     annotate(pdf, fields, overlay, engine)
                     item = {"engine": engine, "source": filename,
                             "processing_status": output_doc["processing_status"],
+                            "cross_engine_word_matches": sum(x.get("cross_engine_word_matches", 0) for x in output_doc.get("page_info", [])),
+                            "word_alignment_opt_in": any(x.get("word_alignment_opt_in", False) for x in output_doc.get("page_info", [])),
                             "expected_fields": len(fields),
                             "matching_values": sum(c["value_match"] for c in fields),
                             "evidence_chain_valid_values": sum(c["value_match"] and c["evidence_chain_valid"] for c in fields),
@@ -171,6 +173,7 @@ def run(output, image_dir, engines=("tesseract", "paddle_arabic")):
                           f"correct source row {item['row_consistent_values']}/{len(fields)}")
                 result["summary"][engine] = {
                     "documents": len(samples),
+                    "cross_engine_word_matches": sum(x["cross_engine_word_matches"] for x in samples),
                     "matching_values": sum(x["matching_values"] for x in samples),
                     "evidence_chain_valid_values": sum(x["evidence_chain_valid_values"] for x in samples),
                     "row_consistent_values": sum(x["row_consistent_values"] for x in samples),
