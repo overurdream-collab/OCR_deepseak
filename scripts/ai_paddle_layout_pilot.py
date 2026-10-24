@@ -9,14 +9,14 @@ from mdia.paddle_layout import PaddleLayoutPilot
 from scripts.ai_table_model_pilot import synthetic_cases, generate_pdf, render_preview
 
 
-def run(output_dir, shard=0, shards=2):
+def run(output_dir, shard=0, shards=2, model_name="PicoDet_layout_1x_table"):
     root=Path(output_dir)
     (root/"pdfs").mkdir(parents=True, exist_ok=True)
     cases=synthetic_cases(root/"pdfs",shard,shards)
     report={"status":"incomplete","scope":"synthetic_table_region_only",
-            "engine":"PP-DocLayout-S", "records":[], "no_financial_writes":True}
+            "engine":model_name, "records":[], "no_financial_writes":True}
     try:
-        model=PaddleLayoutPilot()
+        model=PaddleLayoutPilot(model_name=model_name)
         for c in cases:
             pdf=root/"pdfs"/(c["id"]+".pdf")
             generate_pdf(pdf,c)
@@ -61,6 +61,7 @@ if __name__=="__main__":
     p.add_argument("--shard",type=int,default=0)
     p.add_argument("--shards",type=int,default=2)
     p.add_argument("--output-dir",default="results/ai_paddle_layout")
+    p.add_argument("--model",choices=["PP-DocLayout-S","PicoDet_layout_1x_table"],default="PicoDet_layout_1x_table")
     args=p.parse_args()
     if args.shards<1 or not 0<=args.shard<args.shards: raise SystemExit("invalid shard")
-    run(args.output_dir,args.shard,args.shards)
+    run(args.output_dir,args.shard,args.shards,args.model)
