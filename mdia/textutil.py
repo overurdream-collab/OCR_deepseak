@@ -116,7 +116,7 @@ def last_amount(s: str):
     for tok in reversed(toks):
         if "%" in tok or not re.search(r"\d", tok):
             continue
-        clean = tok.strip("()[]:؛;")
+        clean = tok.strip("[]:؛;")                      # keep parentheses: "(20.00)" is a NEGATIVE amount
         if re.fullmatch(r"[-+]?\(?\d[\d,.\u066B\u066C]*\)?", clean):
             v = parse_number(clean)
             if v is not None:

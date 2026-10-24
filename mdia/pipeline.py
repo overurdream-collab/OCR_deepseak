@@ -18,8 +18,11 @@ def _link_documents(docs):
             for key, basis in (("file_no", "patient_file_no"), ("insurance_no", "insurance_no")):
                 fa, fb = a["patient"][key], b["patient"][key]
                 if fa["raw"] and fb["raw"] and match_key(fa["raw"]) == match_key(fb["raw"]):
-                    links.append({"from": a["document_id"], "to": b["document_id"], "type": "same_patient", "basis": basis,
-                                  "evidence_ids": [fa["evidence_id"], fb["evidence_id"]]})
+                    na, nb = a["patient"]["name"], b["patient"]["name"]
+                    clash = na["raw"] and nb["raw"] and match_key(na["raw"]) != match_key(nb["raw"])
+                    links.append({"from": a["document_id"], "to": b["document_id"],
+                                  "type": "same_number_different_name" if clash else "same_patient", "basis": basis,
+                                  "needs_review": bool(clash), "evidence_ids": [fa["evidence_id"], fb["evidence_id"], na["evidence_id"], nb["evidence_id"]] if clash else [fa["evidence_id"], fb["evidence_id"]]})
                     break
             else:
                 na, nb = a["patient"]["name"], b["patient"]["name"]

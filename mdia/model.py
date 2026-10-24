@@ -19,6 +19,7 @@ class Word:
     method: str = "text-layer"     # text-layer | ocr
     key: str = ""
     rtl_hint: Optional[bool] = None   # reading direction of the table/line this word belongs to
+    box: Optional[list] = None        # bbox in ORIGINAL page space when layout was analysed on a deskewed image
 
     def __post_init__(self):
         if not self.key:
@@ -36,6 +37,9 @@ class Word:
 def union_bbox(words):
     if not words:
         return None
+    if all(w.box for w in words):           # deskewed OCR: report positions on the original (preview) image
+        return [round(min(w.box[0] for w in words), 5), round(min(w.box[1] for w in words), 5),
+                round(max(w.box[2] for w in words), 5), round(max(w.box[3] for w in words), 5)]
     return [round(min(w.x0 for w in words), 5), round(min(w.y0 for w in words), 5),
             round(max(w.x1 for w in words), 5), round(max(w.y1 for w in words), 5)]
 

@@ -33,6 +33,20 @@ def _nf():
     return dict(NOT_FOUND)
 
 
+_CONFUSE = {"O": "0", "o": "0", "l": "1", "I": "1", "|": "1", "S": "5", "B": "8", "Z": "2"}
+
+
+def ocr_digit_suggestion(raw: str):
+    """Suggest (never apply) a reading for a numeric OCR token damaged by look-alike characters,
+    e.g. '45:25' -> 45.25, 'l,200.OO' -> 1,200.00. Returns Decimal or None."""
+    allowed = set("0123456789.,:;()-+") | set(_CONFUSE)
+    if not raw or any(c not in allowed for c in raw) or sum(c.isdigit() for c in raw) < 1:
+        return None                                    # only tokens that already look numeric are candidates
+    t = re.sub(r"(?<=\d)[:;](?=\d)", ".", raw)
+    t = "".join(_CONFUSE.get(c, c) for c in t)
+    return parse_number(t) if t != raw else None
+
+
 class Ctx:
     """Per-document state: evidence store + field factory."""
 
@@ -116,6 +130,10 @@ class Ctx:
              "status": status, "verification": verification}
         if reasons:
             f["review_reasons"] = reasons
+        if status == "unreadable" and kind in ("money", "number") and page.method == "ocr":
+            sug = ocr_digit_suggestion(raw_text)
+            if sug is not None:
+                f["suggestion"] = {"value": float(sug), "reason": "ocr_character_confusion", "applied": False}
         return f
 
 
@@ -196,6 +214,7 @@ class Extractor:
                 continue
             seen_hash[p.text_hash] = no
             tabs = find_tables(p, inherit)
+            # Keep Cloud2: missing table headers on scanned Arabic invoices require review.
             if (not any(t.kind == "invoice" for t in tabs)
                     and self.seg.type in ("hospital_invoice", "clinic_invoice", "pharmacy_invoice", "medical_invoice")
                     and p.method == "ocr"):
@@ -209,7 +228,7 @@ class Extractor:
                 skip |= t.line_idxs
                 if t.kind == "invoice" and not t.inherited:
                     inherit = t
-                if t.inherited and t.bounds:
+                if t.inherited:
                     c.warn("table_layout_inherited", f"الصفحة {no} بلا ترويسة جدول؛ استُخدم تخطيط الصفحة السابقة (ثقة أقل) / "
                            f"no table header on page {no}: column layout inherited from the previous page", "info", page=no)
             self.skip[no] = skip
@@ -484,7 +503,8 @@ class Extractor:
             p = self.pages[no]
             lines = ([(kv.line, sorted(kv.value_words, key=lambda w: w.x0))] if kv.value_words else []) + \
                     [(l, l.words) for l in _continuation(p, kv, self.skip.get(no, set()))
-                     if not (STRENGTH_RE.search(l.text) and FORM_RE.search(l.text))]
+                     if not (STRENGTH_RE.search(l.text) and FORM_RE.search(l.text))
+                     and not (kv.layout == "below" and l.idx == kv.line.idx + 1)]
             for ln, ws in lines:
                 txt = BULLET_RE.sub("", join_words(ws))
                 parts = [s for s in re.split(r"[;؛]|،", txt) if s.strip()]
@@ -598,6 +618,20 @@ class Extractor:
             out.append(rec)
         return out
 
+    def stay_cost_from_items(self, h, items):
+        """Room charge explicitly billed as a line whose name IS a stay-cost label (e.g. "Room Charges")."""
+        from .lexicon import LABELS
+        labels = {match_key(x) for x in LABELS["stay.cost"]}
+        if h.get("accommodation_cost", {}).get("status") != "not_found":
+            return
+        for it in items:
+            if match_key(it["service_name"]["raw"] or "") in labels and it["line_total"]["status"] == "extracted":
+                f = dict(it["line_total"])
+                f["confidence"] = round(f["confidence"] * 0.9, 3)
+                f["derived_from_item"] = it["id"]
+                h["accommodation_cost"] = f
+                return
+
     def hospitalization(self):
         spec = {"admission_date": ({"stay.admit"}, "date"), "discharge_date": ({"stay.discharge"}, "date"),
                 "length_of_stay_days": ({"stay.days"}, "number"), "room_type": ({"stay.room"}, "text"),
@@ -626,4 +660,6 @@ def extract_document(job_id, doc_id, seg, pages, classes) -> dict:
         "evidence": ex.ctx.evidence, "warnings": ex.ctx.warnings, "requires_human_review": [],
         "notes": seg.notes,
     }
+    if doc["hospitalization"]:
+        ex.stay_cost_from_items(doc["hospitalization"], items)
     return doc

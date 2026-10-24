@@ -19,6 +19,32 @@ def _close(a: Decimal, b: Decimal, tol=TOL):
     return abs(a - b) <= tol
 
 
+def _edit1(a: str, b: str) -> bool:
+    """True when strings differ by exactly one substitution/insertion/deletion."""
+    if a == b:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    if abs(len(a) - len(b)) == 1:
+        s, l = (a, b) if len(a) < len(b) else (b, a)
+        return any(l[:i] + l[i + 1:] == s for i in range(len(l)))
+    return False
+
+
+def _suggest(q, up, lt):
+    """Never applied automatically: names the single field whose value, if misread by one character,
+    would make qty x price = total consistent. For the human reviewer only."""
+    digits = lambda d: str(d.quantize(Decimal("0.01")) if d % 1 else int(d)).replace(".", "").replace("-", "")
+    out = []
+    for field, stated, implied in (("line_total", lt, q * up), ("unit_price", up, lt / q if q else None),
+                                   ("quantity", q, lt / up if up else None)):
+        if implied is None or implied <= 0:
+            continue
+        if _edit1(digits(stated).lstrip("0") or "0", digits(implied).lstrip("0") or "0"):
+            out.append({"field": field, "stated": float(stated), "would_be_consistent_if": float(implied.quantize(Decimal("0.01")))})
+    return out or None
+
+
 def _warn(doc, kind, message, severity="warning", **extra):
     doc["warnings"].append({"id": f"{doc['document_id']}-w{len(doc['warnings']) + 1}", "kind": kind,
                             "severity": severity, "message": message, **extra})
@@ -60,9 +86,11 @@ def validate_document(doc: dict):
                 _verify(it["discount"])
         else:
             expected = min(cands.values(), key=lambda c: abs(c - lt))
+            sugg = _suggest(q, up, lt)
             _warn(doc, "line_arithmetic_mismatch",
                   f"بند {it['id']}: الكمية×السعر={gross} لا يطابق الإجمالي {lt} / qty×price={gross} does not match line total {lt}",
-                  record_id=it["id"], expected=float(expected), found=float(lt), evidence_ids=_ids(it["quantity"], it["unit_price"], it["line_total"]))
+                  record_id=it["id"], expected=float(expected), found=float(lt), suggestion=sugg,
+                  evidence_ids=_ids(it["quantity"], it["unit_price"], it["line_total"]))
             for k in ("quantity", "unit_price", "line_total"):
                 _flag(it[k], "arithmetic_mismatch")
 
@@ -73,8 +101,10 @@ def validate_document(doc: dict):
         line_sum = sum((_v(i["line_total"]) for i in items if _v(i["line_total"]) is not None), Decimal(0))
         have_lines = any(_v(i["line_total"]) is not None for i in items)
         base = sub if sub is not None else None
+        gross_sum = sum((_v(i["quantity"]) * _v(i["unit_price"]) for i in items if _v(i["quantity"]) is not None and _v(i["unit_price"]) is not None), Decimal(0))
         if have_lines and base is not None:
-            if _close(line_sum, base):
+            # a subtotal may be printed gross (before line discounts) or net; both are legitimate
+            if _close(line_sum, base) or _close(gross_sum, base) or (disc is not None and _close(line_sum, base - disc)):
                 _verify(inv["subtotal"])
             else:
                 _warn(doc, "items_sum_vs_subtotal", f"مجموع البنود {line_sum} لا يساوي المجموع قبل الخصم {base} / "

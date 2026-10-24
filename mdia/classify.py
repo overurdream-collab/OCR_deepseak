@@ -72,7 +72,7 @@ def classify_page(page: Page) -> PageClass:
         scores[t] = sc
     inv = scores.pop("_invoice")
     if inv >= 5:
-        if _PHARM.search(head) or (_PHARM.search(body) and not _HOSP.search(body)):
+        if _PHARM.search(head):
             scores["pharmacy_invoice"] = inv + 2
         elif _CLIN.search(head) or (_CLIN.search(body) and not _HOSP.search(body)):
             scores["clinic_invoice"] = inv + 1

@@ -66,7 +66,7 @@ def _fix_visual_arabic(words):
 
 def _text_layer(pdf_page, number):
     W, H = float(pdf_page.width), float(pdf_page.height)
-    raw = pdf_page.extract_words(x_tolerance=2, y_tolerance=3, keep_blank_chars=False, use_text_flow=False)
+    raw = pdf_page.extract_words(x_tolerance=1.5, y_tolerance=3, keep_blank_chars=False, use_text_flow=False)
     words = []
     for r in raw:
         t = r["text"].strip()          # NOT normalised yet: lam-alef ligatures must survive until the order is fixed
@@ -124,6 +124,36 @@ def _ocr_image(img, lang, psm=6):
         l, tp, w, h = d["left"][i], d["top"][i], d["width"][i], d["height"][i]
         words.append(Word(t, l / iw, tp / ih, (l + w) / iw, (tp + h) / ih, min(c / 100.0, 1.0), "ocr"))
     return words
+
+
+def estimate_skew(img, limit=4.0):
+    """Skew angle in degrees (rotate(angle) straightens the page). Projection-profile search, pure PIL."""
+    from PIL import Image, ImageOps
+    small = ImageOps.autocontrast(img.convert("L"))
+    small.thumbnail((800, 800))
+    ink = ImageOps.invert(small).point(lambda p: 255 if p > 110 else 0)
+
+    def score(a):
+        r = ink.rotate(a, resample=Image.BILINEAR, fillcolor=0) if a else ink
+        prof = list(r.resize((1, r.height), Image.BOX).tobytes())
+        return sum(v * v for v in prof)
+
+    best = max((score(a / 4.0), a / 4.0) for a in range(int(-limit * 4), int(limit * 4) + 1))[1]
+    fine = max((score(best + k / 20.0), best + k / 20.0) for k in range(-5, 6))[1]
+    return round(fine, 2)
+
+
+def _to_original_space(words, angle, iw, ih):
+    """Map word boxes from the rotated (deskewed) image back to the original image."""
+    import math
+    c, s = math.cos(math.radians(angle)), math.sin(math.radians(angle))
+    cx, cy = iw / 2.0, ih / 2.0
+    for w in words:
+        pts = []
+        for xd, yd in ((w.x0, w.y0), (w.x1, w.y0), (w.x0, w.y1), (w.x1, w.y1)):
+            dx, dy = xd * iw - cx, yd * ih - cy
+            pts.append(((dx * c - dy * s + cx) / iw, (dx * s + dy * c + cy) / ih))
+        w.box = [min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)]
 
 
 def ocr_page(pil_img, lang):
@@ -192,7 +222,15 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
                             page.warnings.append({"kind": "ocr_arabic_model_missing",
                                                   "message": "نموذج OCR العربي (ara) غير مثبت؛ استُخدمت الإنجليزية فقط / Arabic OCR model not installed"})
                         big = pdfium_doc[i].render(scale=config.OCR_DPI / 72.0).to_pil()
-                        page.words, page.method = ocr_page(big, use_lang), "ocr"
+                        angle = estimate_skew(big)
+                        if abs(angle) >= 0.4:
+                            from PIL import Image
+                            rot = big.convert("L").rotate(angle, resample=Image.BICUBIC, fillcolor=255)
+                            page.words, page.method = ocr_page(rot, use_lang), "ocr"
+                            _to_original_space(page.words, angle, *rot.size)
+                            page.flags["deskew_deg"] = angle
+                        else:
+                            page.words, page.method = ocr_page(big, use_lang), "ocr"
                         page.flags["ocr_lang"] = use_lang
                         if page.words:
                             page.flags["ocr_mean_conf"] = round(sum(w.conf for w in page.words) / len(page.words), 3)
