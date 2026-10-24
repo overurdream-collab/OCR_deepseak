@@ -1,0 +1,79 @@
+name: MDIA 60 synthetic invoice stress benchmark (CPU)
+on:
+  push:
+    branches:
+      - experiment/mdia-invoice-benchmark-60
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  invoice-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+      - name: Install Python OCR dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+          python -c 'import paddle; print("Paddle:", paddle.__version__)'
+      - name: Check 60-invoice benchmark syntax
+        run: |
+          python -m compileall -q scripts/benchmark_invoice60.py
+          python -c 'from scripts.benchmark_invoice60 import all_cases; v=all_cases(); assert len(v)==60; print("Deterministic independent synthetic cases:",len(v))'
+      - name: Run BOTH real OCR engines on 20 independent invoices
+        run: |
+          python -u -m scripts.benchmark_invoice60 --shard ${{ matrix.shard }} --shards 3 \
+            --engines tesseract paddle_arabic \
+            --output-dir results/invoice_benchmark60_shard${{ matrix.shard }}
+      - name: Render representative PDF previews (synthetic only)
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import pypdfium2
+          for d in Path('results').glob('invoice_benchmark60_shard*'):
+              for k, pdf in enumerate(sorted((d/'pdfs').glob('*.pdf'))[:6]):
+                  try:
+                      im = pypdfium2.PdfDocument(str(pdf))[0].render(scale=1.25).to_pil()
+                      im.save(d / (pdf.stem + '_preview.png'))
+                  except Exception as exc:
+                      print(pdf.name, type(exc).__name__, str(exc)[:160])
+          PY
+      - name: Show immediate machine-readable benchmark summary
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for p in Path('results').glob('invoice_benchmark60_shard*/results.json'):
+              x=json.loads(p.read_text())
+              print('REPORT', p, 'status=',x['status'])
+              for engine, item in x.get('summary',{}).items():
+                  print(engine,item)
+              for err in x.get('failure_records', [])[:5]:
+                  print('EXPLICIT CASE FAILURE',err['case'],err.get('runtime_error'))
+          PY
+      - name: Save ground truth, sample PDFs, full errors and results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdia-invoice60-shard${{ matrix.shard }}
+          path: |
+            results/invoice_benchmark60_shard${{ matrix.shard }}/
+          retention-days: 30
+          if-no-files-found: warn
