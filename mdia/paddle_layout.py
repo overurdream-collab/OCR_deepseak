@@ -6,9 +6,10 @@ public model weights only when explicitly run. Never changes invoice fields.
 from mdia.table_ai import region
 
 MODEL_NAME = "PP-DocLayout-S"
+SUPPORTED_MODELS = {"PP-DocLayout-S", "PicoDet_layout_1x_table"}
 
 
-def normalized_tables(prediction, image_size, confidence_threshold=.35):
+def normalized_tables(prediction, image_size, confidence_threshold=.2, model_name=MODEL_NAME):
     w,h = image_size
     if not isinstance(prediction, dict):
         raise ValueError("layout result must be dict")
@@ -24,7 +25,7 @@ def normalized_tables(prediction, image_size, confidence_threshold=.35):
             continue
         bbox = candidate.get("coordinate")
         try:
-            obj = region("table", score, bbox, w,h,MODEL_NAME)
+            obj = region("table", score, bbox, w,h,model_name)
         except (ValueError, TypeError):
             continue
         tables.append(obj.as_dict())
@@ -32,18 +33,21 @@ def normalized_tables(prediction, image_size, confidence_threshold=.35):
 
 
 class PaddleLayoutPilot:
-    def __init__(self):
+    def __init__(self, model_name=MODEL_NAME):
+        if model_name not in SUPPORTED_MODELS:
+            raise ValueError("unapproved model name")
         from paddleocr import LayoutDetection
-        self.model = LayoutDetection(model_name=MODEL_NAME)
+        self.model_name = model_name
+        self.model = LayoutDetection(model_name=model_name)
 
     def analyze(self, image_path, image_size):
-        results = self.model.predict(str(image_path), batch_size=1, layout_nms=True)
+        results = self.model.predict(str(image_path), batch_size=1, layout_nms=True, threshold=.2)
         tables = []
         for res in results:
             obj = res.json
             obj = obj() if callable(obj) else obj
-            tables.extend(normalized_tables(obj, image_size))
-        return {"engine": MODEL_NAME, "table_count": len(tables),
+            tables.extend(normalized_tables(obj, image_size, model_name=self.model_name))
+        return {"engine": self.model_name, "table_count": len(tables),
                 "table_regions": tables, "image_size": list(image_size),
                 "recognizes_arabic_text": False, "changes_to_financial_fields": 0,
                 "human_review_required": True}
