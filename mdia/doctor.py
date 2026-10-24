@@ -38,12 +38,22 @@ def main():
         img = Image.new("L", (1400, 120 * len(SAMPLE)), 255)
         dr = ImageDraw.Draw(img)
         for i, t in enumerate(SAMPLE):
-            dr.text((1300, 20 + 120 * i), get_display(arabic_reshaper.reshape(t)), font=f, fill=0, anchor="ra")
+            # Pillow with libraqm handles RTL shaping/bidi directly. Pre-applying
+            # get_display()/reshape() can DOUBLE reverse synthetic text and
+            # invalidate OCR diagnostics, despite working Arabic traineddata.
+            try:
+                dr.text((1300, 20 + 120 * i), t, font=f, fill=0,
+                        anchor="ra", direction="rtl")
+            except (ValueError, KeyError):
+                dr.text((1300, 20 + 120 * i),
+                        get_display(arabic_reshaper.reshape(t)), font=f, fill=0, anchor="ra")
         got = pytesseract.image_to_string(img, lang="ara", config="--psm 6")
         got_lines = [l.strip() for l in got.splitlines() if l.strip()]
         scores = [max([difflib.SequenceMatcher(None, t, g).ratio() for g in got_lines] or [0]) for t in SAMPLE]
         avg = sum(scores) / len(scores)
         res.append(_ok("Arabic OCR round-trip on rendered text", avg >= 0.8, f"mean similarity {avg:.2f} over {len(SAMPLE)} phrases"))
+        if avg < .8:
+            print("   Raw synthetic OCR text:", repr(got[:1000]))
     else:
         res.append(_ok("Arabic OCR round-trip", False, "skipped: needs ara model + reshaper + font"))
 
