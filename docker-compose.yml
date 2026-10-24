@@ -1,0 +1,8 @@
+services:
+  mdia:
+    build: .
+    ports: ["127.0.0.1:8000:8000"]      # exposed on this machine only
+    volumes: ["./data:/data"]
+    environment:
+      MDIA_API_TOKEN: ""                 # set a value to require a bearer token
+    network_mode: "bridge"
