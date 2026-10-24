@@ -40,3 +40,19 @@ python -m scripts.audit_arabic_geometry --engines tesseract paddle_arabic --outp
 - Need independent **word-level** geometric ground truth before claiming exact pixel-position correctness. This audit only checks the *row*.
 - Need more document layouts and scanned real-world de-identified PDFs, with medical privacy and human review.
 - Do not switch the default engine from Tesseract or promote to production based only on these artificial samples.
+
+
+## Source-evidence chain hardening (2026-10-25)
+
+Additional negative controls ensure that a correct value on the correct Y row
+**cannot pass** with the wrong evidence ID, a mismatched raw-to-matched_text,
+empty source-line text, or both the field and evidence pointing to a wrong page.
+The geometry JSON separately reports `evidence_chain_valid_values`.
+This validates **internal consistency only**; it is not independent proof that
+the source text was accurately transcribed or that an interpolated token rectangle
+contains precisely the characters of its claimed field.
+
+Previous verified run: https://github.com/overurdream-collab/OCR_deepseak/actions/runs/40134405268
+reported PaddleOCR 52/54 and Tesseract 20/54 source-row-consistent
+synthetic values. The hardened implementation requires a new CI run on its
+exact SHA before those figures can be reasserted as current.

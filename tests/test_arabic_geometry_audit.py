@@ -8,9 +8,9 @@ from scripts.audit_arabic_geometry import BASELINES, H, TOLERANCE_PT, check_geom
 
 def fake(value, band, delta=0, page=1, evidence_page=1):
     y = (BASELINES[band] + delta) / H
-    field = {"value": value, "evidence_id": "e1", "page": page}
+    field = {"value": value, "raw": str(value), "evidence_id": "e1", "page": page}
     evidence = {"id": "e1", "bbox": [0.4, y-0.005, 0.6, y+0.005],
-                "page": evidence_page, "text": str(value)}
+                "page": evidence_page, "text": str(value), "matched_text": str(value)}
     return field, evidence
 
 
@@ -49,6 +49,34 @@ class ArabicRowGeometryTests(unittest.TestCase):
         result = check_geometry(field, ev, "invoice_no", "INV-4004", "invoice.number")
         self.assertTrue(result["geometry_valid"])
         self.assertFalse(result["row_band_consistent"])
+
+    def test_wrong_evidence_id_same_row_rejected(self):
+        field, ev = fake("خالد يوسف", "patient_invoice")
+        ev["id"] = "another-evidence-id"
+        r = check_geometry(field, ev, "patient_invoice", "خالد يوسف", "patient.name")
+        self.assertTrue(r["geometry_valid"])
+        self.assertFalse(r["evidence_chain_valid"])
+        self.assertFalse(r["row_band_consistent"])
+
+    def test_wrong_matched_source_same_row_rejected(self):
+        field, ev = fake("خالد يوسف", "patient_invoice")
+        ev["matched_text"] = "مريض مختلف"
+        r = check_geometry(field, ev, "patient_invoice", "خالد يوسف", "patient.name")
+        self.assertFalse(r["evidence_chain_valid"])
+        self.assertFalse(r["row_band_consistent"])
+
+    def test_blank_source_text_same_row_rejected(self):
+        field, ev = fake("خالد يوسف", "patient_invoice")
+        ev["text"] = " "
+        r = check_geometry(field, ev, "patient_invoice", "خالد يوسف", "patient.name")
+        self.assertFalse(r["evidence_chain_valid"])
+        self.assertFalse(r["row_band_consistent"])
+
+    def test_same_wrong_page_rejected(self):
+        field, ev = fake("خالد يوسف", "patient_invoice", page=2, evidence_page=2)
+        r = check_geometry(field, ev, "patient_invoice", "خالد يوسف", "patient.name")
+        self.assertFalse(r["geometry_valid"])
+        self.assertFalse(r["row_band_consistent"])
 
     def test_six_synthetic_pdf_variants(self):
         with tempfile.TemporaryDirectory() as temp:

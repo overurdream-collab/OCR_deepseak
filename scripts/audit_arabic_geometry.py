@@ -56,23 +56,35 @@ def targets(doc, truth):
     return out
 
 
-def check_geometry(field, evidence, band, expected, label):
-    """Checks whether a MATCHING VALUE cites the correct source ROW (Y only)."""
+def check_geometry(field, evidence, band, expected, label, expected_page=1):
+    """Check matching value, internal evidence chain and expected PDF ROW (Y only).
+
+    This is NOT an independent word-box accuracy test. All included synthetic
+    source documents are one page, so both record and evidence MUST cite page 1.
+    """
     raw = val(field)
     match = (same(expected, raw) if not label.endswith(".strength") else
              bool(raw and re.search(r"(?<!\d)500(?!\d)", norm(raw))))
-    bbox = evidence.get("bbox") if evidence else None
-    valid = (isinstance(field, dict) and isinstance(bbox, list) and len(bbox) == 4
-             and all(isinstance(v, (float, int)) and 0 <= v <= 1 for v in bbox)
-             and bbox[0] < bbox[2] and bbox[1] < bbox[3]
-             and field.get("page") == evidence.get("page"))
-    offset = round((bbox[1] + bbox[3]) * H / 2 - BASELINES[band], 2) if valid else None
+    bbox = evidence.get("bbox") if isinstance(evidence, dict) else None
+    geom = (isinstance(field, dict) and isinstance(bbox, list) and len(bbox) == 4
+            and all(isinstance(v, (float, int)) and 0 <= v <= 1 for v in bbox)
+            and bbox[0] < bbox[2] and bbox[1] < bbox[3]
+            and field.get("page") == evidence.get("page") == expected_page)
+    # Integrity of the program's evidence reference, not proof that its line
+    # text or interpolated x-coordinates match independently observed pixels.
+    chain = bool(isinstance(field, dict) and isinstance(evidence, dict)
+                 and field.get("evidence_id") and field["evidence_id"] == evidence.get("id")
+                 and isinstance(field.get("raw"), str)
+                 and field["raw"] == evidence.get("matched_text")
+                 and str(evidence.get("text") or "").strip())
+    offset = round((bbox[1] + bbox[3]) * H / 2 - BASELINES[band], 2) if geom else None
     return {"field": label, "expected": expected, "actual": raw, "value_match": match,
             "evidence_id": field.get("evidence_id") if isinstance(field, dict) else None,
             "page": field.get("page") if isinstance(field, dict) else None,
-            "bbox": bbox if valid else None, "geometry_valid": valid,
+            "bbox": bbox if geom else None, "geometry_valid": bool(geom),
+            "evidence_chain_valid": chain,
             "row_y_offset_pt": offset, "expected_row_baseline_from_top_pt": BASELINES[band],
-            "row_band_consistent": bool(match and valid and abs(offset) <= TOLERANCE_PT)}
+            "row_band_consistent": bool(match and geom and chain and abs(offset) <= TOLERANCE_PT)}
 
 
 def annotate(pdf_path, records, dst, engine):
@@ -150,6 +162,7 @@ def run(output, image_dir, engines=("tesseract", "paddle_arabic")):
                             "processing_status": output_doc["processing_status"],
                             "expected_fields": len(fields),
                             "matching_values": sum(c["value_match"] for c in fields),
+                            "evidence_chain_valid_values": sum(c["value_match"] and c["evidence_chain_valid"] for c in fields),
                             "row_consistent_values": sum(c["row_band_consistent"] for c in fields),
                             "overlay": str(overlay), "fields": fields}
                     samples.append(item)
@@ -159,6 +172,7 @@ def run(output, image_dir, engines=("tesseract", "paddle_arabic")):
                 result["summary"][engine] = {
                     "documents": len(samples),
                     "matching_values": sum(x["matching_values"] for x in samples),
+                    "evidence_chain_valid_values": sum(x["evidence_chain_valid_values"] for x in samples),
                     "row_consistent_values": sum(x["row_consistent_values"] for x in samples),
                     "expected_fields": sum(x["expected_fields"] for x in samples),
                 }
