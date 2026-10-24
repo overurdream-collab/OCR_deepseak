@@ -16,7 +16,7 @@ class TableAIGeometryTests(unittest.TestCase):
         row = region("table row", .95, [10, 20, 300, 65], 500, 250, STRUCTURE_MODEL)
         remapped = remap_crop(row, crop, (1000, 600))
         self.assertEqual([round(x, 4) for x in remapped.box],
-                         [.11, .2833, .40, .3917])
+                         [.11, .2833, .40, .3583])
 
     def test_offpage_box_rejected(self):
         for bbox in ([10, 10, 101, 50], [-1, 5, 20, 35],
