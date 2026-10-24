@@ -11,7 +11,7 @@ from PIL import ImageDraw
 from mdia.pipeline import process_job
 from mdia.store import Store
 from scripts.compare_arabic_ocr import prepare
-from scripts.compare_structured_arabic import GT, _find_name, normalize, same, value
+from scripts.compare_structured_arabic import GT, row_by_name, norm, same, val
 from tests.arabic_samples import invoice as arabic_invoice, prescription as arabic_prescription
 from tests.make_samples import H
 
@@ -38,27 +38,29 @@ def targets(doc, truth):
             "patient_invoice" if "items" in truth else "patient_rx")]
     if "items" in truth:
         inv = (doc.get("invoices") or [{}])[0]
-        out += [("invoice.number", truth["invoice_no"], inv.get("invoice_number", {}), "invoice_no"),
-                ("invoice.total", truth["invoice_total"], inv.get("invoice_total", {}), "invoice_total")]
+        out += [("invoice.number", truth["number"], inv.get("invoice_number", {}), "invoice_no"),
+                ("invoice.total", truth["total"], inv.get("invoice_total", {}), "invoice_total")]
         for i, item in enumerate(truth["items"], 1):
-            row = _find_name(doc.get("invoice_items", []), "service_name", item["name"])
-            for key, attr in (("name", "service_name"), ("qty", "quantity"),
-                              ("unit_price", "unit_price"), ("line_total", "line_total")):
-                out.append((f"items.{i}.{key}", item["name"] if key == "name" else item[key],
-                            (row or {}).get(attr, {}), f"item{i}"))
+            name, qty, unit_price, line_total = item
+            row = row_by_name(doc.get("invoice_items", []), "service_name", name)
+            for key, expected, attr in (("name", name, "service_name"), ("qty", qty, "quantity"),
+                                        ("unit_price", unit_price, "unit_price"),
+                                        ("line_total", line_total, "line_total")):
+                out.append((f"items.{i}.{key}", expected, row.get(attr, {}), f"item{i}"))
     else:
         for i, med in enumerate(truth.get("medicines", []), 1):
-            row = _find_name(doc.get("medications", []), "brand_name", med["name"])
-            out += [(f"medicines.{i}.name", med["name"], (row or {}).get("brand_name", {}), f"medicine{i}"),
-                    (f"medicines.{i}.strength", med["strength"], (row or {}).get("strength", {}), f"medicine{i}")]
+            name, strength = med
+            row = row_by_name(doc.get("medications", []), "brand_name", name)
+            out += [(f"medicines.{i}.name", name, row.get("brand_name", {}), f"medicine{i}"),
+                    (f"medicines.{i}.strength", strength, row.get("strength", {}), f"medicine{i}")]
     return out
 
 
 def check_geometry(field, evidence, band, expected, label):
     """Checks whether a MATCHING VALUE cites the correct source ROW (Y only)."""
-    raw = value(field)
+    raw = val(field)
     match = (same(expected, raw) if not label.endswith(".strength") else
-             bool(raw and re.search(r"(?<!\d)500(?!\d)", normalize(raw))))
+             bool(raw and re.search(r"(?<!\d)500(?!\d)", norm(raw))))
     bbox = evidence.get("bbox") if evidence else None
     valid = (isinstance(field, dict) and isinstance(bbox, list) and len(bbox) == 4
              and all(isinstance(v, (float, int)) and 0 <= v <= 1 for v in bbox)
@@ -130,7 +132,7 @@ def run(output, image_dir, engines=("tesseract", "paddle_arabic")):
                     ):
                         raise RuntimeError(f"{engine}/{filename}: OCR processing failed")
                     docs = output_doc["documents"]
-                    doc = next((d for d in docs if d.get("document_type") == truth["document_type"]),
+                    doc = next((d for d in docs if d.get("document_type") == truth["type"]),
                                docs[0] if docs else {})
                     if engine == "paddle_arabic" and not any(
                         w.get("kind") == "paddle_line_geometry_only"
