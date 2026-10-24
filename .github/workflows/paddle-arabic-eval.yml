@@ -1,0 +1,56 @@
+name: PaddleOCR v5 Arabic - isolated CPU evaluation
+on:
+  push:
+    branches:
+      - experiment/paddleocr-arabic
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Tesseract and Arabic fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara fonts-hosny-amiri fonts-dejavu-core
+      - name: Install existing MDIA dependencies (Paddle optional)
+        run: python -m pip install -r requirements.txt
+      - name: Full synthetic regression suite including mocked Paddle integration
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Existing Arabic OCR environment diagnostic
+        run: python -m mdia.doctor
+  live-paddle-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Tesseract and Arabic fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng tesseract-ocr-ara fonts-hosny-amiri fonts-dejavu-core
+      - name: Install CPU Paddle runtime and optional PaddleOCR
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+          python -c 'import paddle, paddleocr; print("Paddle runtime:", paddle.__version__)'
+      - name: Compare actual Arabic OCR models on same rendered synthetic PDFs
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: |
+          python -m scripts.compare_arabic_ocr --output results/paddle_arabic_vs_tesseract.json
+      - name: Attach raw OCR results, including explicit failure state
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paddle-arabic-synthetic-comparison
+          path: results/paddle_arabic_vs_tesseract.json
+          if-no-files-found: warn

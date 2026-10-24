@@ -176,13 +176,19 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
     import pdfplumber
     import pypdfium2 as pdfium
     lang = lang or config.OCR_LANG
+    import os
+    engine = os.environ.get("MDIA_OCR_ENGINE", "tesseract").strip().lower()
+    if engine not in ("tesseract", "paddle_arabic"):
+        raise ValueError(f"Unsupported MDIA_OCR_ENGINE: {engine}")
+    use_paddle = engine == "paddle_arabic"
     n_pages = check_pdf(pdf_path)
     pages_dir = work_dir / "pages"
     pages_dir.mkdir(parents=True, exist_ok=True)
     langs = available_ocr_langs()
     use_lang = "+".join(l for l in lang.split("+") if l in langs) or ("eng" if "eng" in langs else lang)
     ar_missing = "ara" in lang and "ara" not in langs
-    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}".encode()).hexdigest()[:8]
+    # Avoid cross-engine cache pollution when switching OCR engines.
+    opt_sig = hashlib.sha1(f"{ocr_mode}|{use_lang}|{engine}|{('arabic_PP-OCRv5_mobile_rec' if use_paddle else 'tesseract')}".encode()).hexdigest()[:8]
     pages = []
     pdfium_doc = pdfium.PdfDocument(str(pdf_path))
     with pdfplumber.open(str(pdf_path)) as plumb:
@@ -214,24 +220,31 @@ def read_document(pdf_path: Path, work_dir: Path, ocr_mode="auto", lang=None, pr
                 pil_prev.save(img_path)
                 page.image = img_path.name
                 if need_ocr:
-                    if not langs:
+                    if not langs and not use_paddle:
                         page.warnings.append({"kind": "ocr_unavailable", "message": "Tesseract غير مثبت / not installed"})
                         page.method, page.words = "none", []
                     else:
-                        if ar_missing:
+                        if ar_missing and not use_paddle:
                             page.warnings.append({"kind": "ocr_arabic_model_missing",
                                                   "message": "نموذج OCR العربي (ara) غير مثبت؛ استُخدمت الإنجليزية فقط / Arabic OCR model not installed"})
+                        if use_paddle:
+                            from .paddle_arabic import ocr_image as selected_ocr
+                            page.flags["ocr_engine"] = "paddleocr-v5-arabic"
+                            page.warnings.append({"kind": "paddle_line_geometry_only", "message":
+                                                  "PaddleOCR word boxes are estimated from text-line rectangles; verify all highlighted values manually"})
+                        else:
+                            selected_ocr = lambda image: ocr_page(image, use_lang)
                         big = pdfium_doc[i].render(scale=config.OCR_DPI / 72.0).to_pil()
                         angle = estimate_skew(big)
                         if abs(angle) >= 0.4:
                             from PIL import Image
                             rot = big.convert("L").rotate(angle, resample=Image.BICUBIC, fillcolor=255)
-                            page.words, page.method = ocr_page(rot, use_lang), "ocr"
+                            page.words, page.method = selected_ocr(rot), "ocr"
                             _to_original_space(page.words, angle, *rot.size)
                             page.flags["deskew_deg"] = angle
                         else:
-                            page.words, page.method = ocr_page(big, use_lang), "ocr"
-                        page.flags["ocr_lang"] = use_lang
+                            page.words, page.method = selected_ocr(big), "ocr"
+                        page.flags["ocr_lang"] = "arabic+english (Paddle PP-OCRv5)" if use_paddle else use_lang
                         if page.words:
                             page.flags["ocr_mean_conf"] = round(sum(w.conf for w in page.words) / len(page.words), 3)
                         else:

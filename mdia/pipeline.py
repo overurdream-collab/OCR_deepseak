@@ -61,6 +61,18 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                     d["warnings"].append({"id": f"{doc_id}-wc", "kind": "low_classification_confidence", "severity": "warning",
                                           "message": f"نوع المستند غير مؤكد ({seg.type}, {seg.confidence}) / document type uncertain"})
                 validate_document(d)
+                # PaddleOCR returns detected LINE geometry. Token rectangles are
+                # interpolated rather than independently localized. Do not call
+                # the document fully verified even when text checks pass.
+                uncertain = [p.number for p in seg_pages if p.flags.get("ocr_engine") == "paddleocr-v5-arabic"]
+                if uncertain:
+                    d["warnings"].append({"id": f"{doc_id}-wp", "kind": "paddle_line_geometry_only",
+                        "severity": "warning", "message": "PaddleOCR token positions estimated from detected line boxes; verify evidence on original PDF",
+                        "pages": uncertain})
+                    d["requires_human_review"].append({"record_id": doc_id, "field": "ocr_word_bbox",
+                        "raw": None, "evidence_id": None, "page": uncertain[0], "confidence": 0.0,
+                        "reasons": ["paddle_line_geometry_only"]})
+                    d["processing_status"] = "completed_with_review"
             except Exception as e:  # one failing document must not lose the others
                 d = {"document_id": doc_id, "document_type": seg.type, "processing_status": "failed", "pages": seg.pages,
                      "patient": {}, "provider": {}, "invoices": [], "invoice_items": [], "medications": [], "diagnoses": [],
