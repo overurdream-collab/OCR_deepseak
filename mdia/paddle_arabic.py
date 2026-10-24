@@ -74,6 +74,17 @@ def _bbox(value, width, height):
             min(1., max(0., x1 / width)), min(1., max(0., y1 / height))]
 
 
+def _repair_labeled_line(text):
+    """Restore legible Arabic label/value order without inventing missing data.
+
+    OCR tokens remain approximate locations and require human review.
+    """
+    invoice = re.fullmatch(r"([A-Za-z]{2,5}-[0-9]{2,12})\s*[:：]\s*رقم\s+الفاتورة", text)
+    if invoice:
+        return "رقم الفاتورة: " + invoice.group(1)
+    return re.sub(r"(اسم\s+المريض)(?=[\u0621-\u064a])", r"\1 ", text)
+
+
 def result_to_words(result, image_size):
     """Adapt official OCRResult rec_texts/scores/boxes to MDIA Word objects.
 
@@ -98,7 +109,7 @@ def result_to_words(result, image_size):
         if len(texts) != len(scores) or len(texts) != len(boxes):
             raise ValueError('Misaligned PaddleOCR recognition/geometry arrays')
         for text, score, bounds in zip(texts, scores, boxes):
-            text = nfkc(str(text).strip())
+            text = _repair_labeled_line(nfkc(str(text).strip()))
             if not text:
                 continue
             confidence = float(score)
