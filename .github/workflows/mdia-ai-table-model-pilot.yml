@@ -1,0 +1,78 @@
+name: MDIA AI table layout pilot — free local models
+on:
+  push:
+    branches:
+      - experiment/mdia-ai-table-model-pilot
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install existing MDIA dependencies and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-dejavu-core fonts-hosny-amiri tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng
+          python -m pip install -r requirements.txt
+      - name: Test all original regressions plus model-free geometry guards
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+  real-table-model:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      TRANSFORMERS_NO_ADVISORY_WARNINGS: '1'
+      OMP_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Arabic font and PDF dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-dejavu-core
+          python -m pip install -r requirements.txt
+      - name: Install free CPU PyTorch and table detection runtime
+        run: |
+          python -m pip install torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install 'transformers==4.57.1' 'timm>=1.0,<2' 'safetensors>=0.5'
+      - name: Run actual model on six synthetic medical invoices
+        run: |
+          python -u -m scripts.ai_table_model_pilot \
+            --shard ${{ matrix.shard }} --shards 2 \
+            --output-dir results/ai_table_shard${{ matrix.shard }}
+      - name: Print explicit failure or success state
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          for p in Path('results').glob('ai_table_shard*/table_pilot_results.json'):
+              r=json.loads(p.read_text())
+              print('STATUS',r['status'],'SUMMARY',r.get('summary'))
+              for item in r['records']:
+                  print(item['id'], 'tables', item['predicted_tables'],
+                        'rows', item['predicted_rows'], 'columns', item['predicted_columns'])
+              assert r['status']=='completed_visual_table_model_pilot'
+          PY
+      - name: Store PDF evidence, visuals and model proposals
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdia-table-transformer-shard${{ matrix.shard }}
+          path: results/ai_table_shard${{ matrix.shard }}/
+          retention-days: 30
+          if-no-files-found: warn
