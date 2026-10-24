@@ -150,7 +150,10 @@ def _to_original_space(words, angle, iw, ih):
     cx, cy = iw / 2.0, ih / 2.0
     for w in words:
         pts = []
-        for xd, yd in ((w.x0, w.y0), (w.x1, w.y0), (w.x0, w.y1), (w.x1, w.y1)):
+        # Preserve secondary Tesseract word boxes through deskew rotation.
+        # Never replace them with Paddle's interpolated token rectangle.
+        bx = w.box if getattr(w, "geometry_source", "") == "cross_engine_word_match" and w.box else [w.x0, w.y0, w.x1, w.y1]
+        for xd, yd in ((bx[0], bx[1]), (bx[2], bx[1]), (bx[0], bx[3]), (bx[2], bx[3])):
             dx, dy = xd * iw - cx, yd * ih - cy
             pts.append(((dx * c - dy * s + cx) / iw, (dx * s + dy * c + cy) / ih))
         w.box = [min(p[0] for p in pts), min(p[1] for p in pts), max(p[0] for p in pts), max(p[1] for p in pts)]
