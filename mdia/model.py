@@ -19,8 +19,8 @@ class Word:
     method: str = "text-layer"     # text-layer | ocr
     key: str = ""
     rtl_hint: Optional[bool] = None   # reading direction of the table/line this word belongs to
-    geometry_source: str = "native"   # native | line_interpolated | cross_engine_word_match
     box: Optional[list] = None        # bbox in ORIGINAL page space when layout was analysed on a deskewed image
+    geometry_source: str = "native"   # native | line_interpolated | cross_engine_word_match
 
     def __post_init__(self):
         if not self.key:
