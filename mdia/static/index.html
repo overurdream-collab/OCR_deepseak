@@ -21,6 +21,8 @@ main{display:grid;grid-template-columns:200px 1fr 1.25fr;gap:10px;padding:10px;h
 .job.sel{border-color:var(--pri);background:#eef4fb}.bar{height:5px;background:#e6ebf1;border-radius:3px;margin-top:4px}.bar i{display:block;height:100%;background:var(--pri);border-radius:3px}
 #viewer{position:relative;display:inline-block;min-width:100%}#viewer img{width:100%;display:block}
 .box{position:absolute;border:2px solid #e8590c;background:rgba(232,89,12,.18);pointer-events:none;border-radius:2px}
+.box.estimated{border-style:dashed;background:rgba(232,89,12,.08)}
+.box.cross-ocr{border-color:#087f5b;background:rgba(8,127,91,.10)}
 .tabs{display:flex;gap:2px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--line)}
 .tab{padding:3px 9px;border-radius:14px;border:1px solid var(--line);cursor:pointer;font-size:12px;background:#fff}.tab.on{background:var(--pri);color:#fff;border-color:var(--pri)}
 table{border-collapse:collapse;width:100%;font-size:12.5px}th,td{border:1px solid var(--line);padding:3px 6px;text-align:start;vertical-align:top}th{background:#f1f5f9;position:sticky;top:0}
@@ -83,11 +85,11 @@ function draw(ev){const v=$('#viewer');if(!job){v.innerHTML='';return}
   const n=(res?res.source.pages:1);$('#pg').textContent=`${page} / ${n}`;
   v.style.width=(zoom*100)+'%';
   let h=`<img src="/api/jobs/${job}/pages/${page}.png${TOKEN?'?token='+TOKEN:''}" onerror="this.alt='(الصورة غير جاهزة بعد)'">`;
-  if(ev&&ev.page===page)for(const b of ev.bboxes||[ev.bbox])h+=`<div class="box" style="left:${b[0]*100}%;top:${b[1]*100}%;width:${(b[2]-b[0])*100}%;height:${(b[3]-b[1])*100}%"></div>`;
+  if(ev&&ev.page===page)for(const b of ev.bboxes||[ev.bbox]){const cls=ev.geometry_source==='cross_engine_word_match'?'cross-ocr':ev.geometry_source==='line_interpolated'?'estimated':'';h+=`<div class="box ${cls}" style="left:${b[0]*100}%;top:${b[1]*100}%;width:${(b[2]-b[0])*100}%;height:${(b[3]-b[1])*100}%"></div>`;}
   v.innerHTML=h;const bx=v.querySelector('.box');if(bx)bx.scrollIntoView({block:'center',inline:'center',behavior:'smooth'})}
 $('#prev').onclick=()=>{if(page>1){page--;draw()}};$('#next').onclick=()=>{if(res&&page<res.source.pages){page++;draw()}};
 $('#zin').onclick=()=>{zoom=Math.min(4,zoom+.25);draw()};$('#zout').onclick=()=>{zoom=Math.max(.5,zoom-.25);draw()};
-function focusEv(id){const e=evMap[id];if(!e)return;page=e.page;draw(e);$('#msg').textContent=`المصدر: ص${e.page} · ${e.method} · ثقة ${e.confidence} — "${e.text.slice(0,70)}"`}
+function focusEv(id){const e=evMap[id];if(!e)return;page=e.page;draw(e);$('#msg').textContent=`المصدر: ص${e.page} · ${e.method} · ثقة ${e.confidence} · الموقع: ${e.geometry_source==='cross_engine_word_match'?'تطابق بمحركين (غير معتمد بكسليًا)':e.geometry_source==='line_interpolated'?'تقديري؛ يحتاج مراجعة':(e.geometry_source||'غير محدد')} — "${e.text.slice(0,70)}"`}
 async function edit(rec,field,cur){const v=prompt(`تصحيح ${field}\n(المستند الأصلي والقيمة المستخرجة لا يتغيران)`,cur??'');if(v===null)return;
   await api(`/api/jobs/${job}/corrections`,{method:'POST',body:JSON.stringify({record_id:rec,field,value:v,note:'manual'})});await refresh()}
 async function undo(rec,field){await api(`/api/jobs/${job}/corrections?record_id=${encodeURIComponent(rec)}&field=${field}`,{method:'DELETE'});await refresh()}

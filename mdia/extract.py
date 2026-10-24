@@ -75,7 +75,19 @@ class Ctx:
         conf = sum(w.conf for w in words) / len(words)
         conf = conf * (0.97 if page.method == "text-layer" else 0.95)
         eid = f"{self.doc_id}-ev{len(self.evidence) + 1}"
+        if page.flags.get("ocr_engine") == "paddleocr-v5-arabic":
+            # Some fields pass the whole source line. Never tag these as
+            # precisely word-localized even if the second OCR matched tokens.
+            selected = join_words(sorted(words, key=lambda w: w.x0),
+                                  ar_ratio(" ".join(w.text for w in words)) > 0.5)
+            exact_scope = match_key(selected) == match_key(raw)
+            geometry_source = ("cross_engine_word_match"
+                               if exact_scope and all(w.geometry_source == "cross_engine_word_match" for w in words)
+                               else "line_interpolated")
+        else:
+            geometry_source = "pdf_text" if page.method == "text-layer" else "tesseract_word"
         self.evidence.append({
+            "geometry_source": geometry_source, "word_box_verified": False,
             "id": eid, "document_id": self.doc_id, "page": page.number, "text": source, "matched_text": raw,
             "bbox": bbox, "bboxes": boxes or [bbox], "method": page.method, "confidence": round(conf * mult, 3)})
         self._ev_index[key] = eid
@@ -463,12 +475,23 @@ class Extractor:
                         if directions:
                             name_part = name_part[:directions.start()]
                     name = name_part.strip(" -:,;.")
+                    list_number_removed = False
+                    if p.method == "ocr" and not explicit_rx:
+                        # OCR may read an Arabic list marker as ١٠ or ٢٠.
+                        # Remove only a digit-only prefix before an Arabic name;
+                        # do not guess its ordinal or a dosage.
+                        marker = re.fullmatch(r"[0-9٠-٩]{1,2}[.)]?\s+(.+)", name)
+                        if marker and has_ar(marker.group(1)):
+                            name = marker.group(1).strip()
+                            list_number_removed = True
                     if not name or len(name) > 80:
                         continue
                     if not explicit_rx and not (FORM_RE.search(txt) or FREQ_RE.search(txt)):
                         continue
                     ws = ln.words
-                    name_f = self.ctx.field(p, ws, raw=name, source=ln.text, mult=0.8, note="free_text_line")
+                    name_f = self.ctx.field(p, ws, raw=name, source=ln.text,
+                                            mult=0.64 if list_number_removed else 0.8,
+                                            note="ocr_list_prefix_removed_needs_review" if list_number_removed else "free_text_line")
                     str_f = (self.ctx.field(p, ws, raw=m.group(0), source=ln.text, mult=0.8)
                              if m else _nf())
 
