@@ -21,6 +21,12 @@ class ArabicRowGeometryTests(unittest.TestCase):
         self.assertTrue(r["row_band_consistent"])
         self.assertEqual(r["row_y_offset_pt"], 3)
 
+    def test_reject_neighbouring_invoice_row(self):
+        field, ev = fake("كشف استشاري", "item1", 15)
+        result = check_geometry(field, ev, "item1", "كشف استشاري", "items.1.name")
+        self.assertTrue(result["value_match"])
+        self.assertFalse(result["row_band_consistent"])
+
     def test_reject_correct_value_on_wrong_row(self):
         field, ev = fake("خالد يوسف", "patient_invoice", 45)
         r = check_geometry(field, ev, "patient_invoice", "خالد يوسف", "patient.name")
