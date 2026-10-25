@@ -1,0 +1,63 @@
+name: MDIA release acceptance - 300 real PaddleOCR invoice PDFs
+on:
+  push:
+    branches:
+      - release/mdia-verified-paddle-core
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-ocr-300:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR, Arabic font and Paddle inference
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Full deterministic tests and Arabic readiness
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+      - name: Run real PaddleOCR on 50 independent PDFs with source reconciliation enabled
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic \
+            --output-dir results/release_paddle_shard${{ matrix.shard }}
+      - name: Strict completion and truth-linked score
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          paths=list(Path('results').glob('release_paddle_shard*/results.json'))
+          assert len(paths)==1, 'missing truth-linked report'
+          d=json.loads(paths[0].read_text('utf-8'))
+          print('RELEASE CANDIDATE:', d['status'], 'shard',d['shard'])
+          print('REAL PADDLE:',d.get('summary',{}).get('paddle_arabic'))
+          for f in d.get('failure_records',[])[:5]: print('REPORTED FAILURE',f['case'],f.get('runtime_error'))
+          assert d['status']=='completed_real_ocr', 'a partial run is NOT acceptance'
+          p=d['summary']['paddle_arabic']
+          assert p['documents']==50 and p['failures']==0, 'missing/failed real OCR'
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-release-evidence-shard${{ matrix.shard }}
+          path: results/release_paddle_shard${{ matrix.shard }}/
+          retention-days: 30
+          if-no-files-found: error
