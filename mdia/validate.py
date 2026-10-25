@@ -176,6 +176,23 @@ def validate_document(doc: dict):
                   "warning", record_id=inv["id"], incomplete_item_ids=incomplete,
                   evidence_ids=_ids(inv["invoice_total"]))
 
+    # Optional strict provenance check. Each financial field is compared to
+    # its OWN OCR evidence ID and row position; amounts are never rewritten.
+    if os.environ.get("MDIA_EVIDENCE_RECONCILIATION", "0") == "1" and items:
+        from .invoice_reconciliation import review_document_evidence
+        for finding in review_document_evidence(doc):
+            it = next((row for row in items if row["id"] == finding["record_id"]), None)
+            if it is None:
+                continue
+            reasons = finding["field_reasons"]
+            _warn(doc, "invoice_source_reconciliation",
+                  "تدقيق موقع وقيمة الحقل في بند الفاتورة / invoice evidence review",
+                  "warning", record_id=it["id"], field_reasons=reasons,
+                  evidence_ids=_ids(*(it[k] for k in ("service_name", "quantity", "unit_price", "line_total"))))
+            for key, causes in reasons.items():
+                for reason in causes:
+                    _flag(it[key], "source_" + reason)
+
     # 3) probable duplicates (kept, only flagged: repetition is not proof of double billing)
     seen = {}
     for it in items:
