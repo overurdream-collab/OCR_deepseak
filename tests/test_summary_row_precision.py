@@ -13,6 +13,8 @@ def line(i, y, label, amount):
     return Line(1,i,sorted(words,key=lambda w:w.x0),rtl=True)
 
 class SummaryRowTests(unittest.TestCase):
+    # No amount may be inferred from a financial summary label.
+
     def test_only_exact_financial_summary_labels(self):
         for s in ("المجموع قبل الخصم", "الخصم", "الضريبة", "إجمالي الفاتورة", "Subtotal", "VAT", "Total"):
             self.assertTrue(_is_summary_label(s),s)
