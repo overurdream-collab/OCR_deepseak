@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - feat/mdia-cloud2-fixes
+      - main
+      - ci/mdia-main-release-guards
   workflow_dispatch:
   pull_request:
     paths:
