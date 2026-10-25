@@ -88,6 +88,7 @@ def extract_json(raw):
     decoder = json.JSONDecoder()
     if not isinstance(raw, str):
         raise ValueError("response is not text")
+    candidates = []
     for start in (m.start() for m in re.finditer(r"\{", raw)):
         try:
             candidate, _ = decoder.raw_decode(raw[start:])
@@ -96,7 +97,9 @@ def extract_json(raw):
         if isinstance(candidate, dict) and "items" in candidate and "invoice_number" in candidate:
             if not isinstance(candidate["items"], list):
                 raise ValueError("model returned non-list invoice items")
-            return candidate
+            candidates.append(candidate)
+    if candidates:
+        return candidates[-1]
     raise ValueError("no valid invoice JSON object in model output")
 
 
@@ -164,7 +167,7 @@ def run_one(cli, model, projector, case, dest, context=4096, max_tokens=500, tim
         str(cli), "-m", str(model), "--mmproj", str(projector),
         "--image", str(image), "-p", PROMPT, "-st", "-n", str(max_tokens),
         "-c", str(context), "-t", "3", "-ngl", "0",
-        "--no-mmproj-offload", "--temp", "0", "--simple-io",
+        "--no-mmproj-offload", "--temp", "0", "--simple-io", "--no-display-prompt",
     ]
     start = time.monotonic()
     result = {"id": case_id, "layout": case["layout"], "representation": case["representation"],
