@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - release/mdia-verified-paddle-core
+      - main
+      - ci/mdia-main-release-guards
     paths:
       - 'Dockerfile'
       - 'run_windows.bat'
