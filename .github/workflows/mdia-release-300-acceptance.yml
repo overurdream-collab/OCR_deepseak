@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - release/mdia-verified-paddle-core
+    paths:
+      - 'mdia/**'
+      - 'tests/**'
+      - 'scripts/benchmark_invoice300.py'
   workflow_dispatch:
 permissions:
   contents: read
