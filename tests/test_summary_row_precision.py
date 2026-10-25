@@ -25,8 +25,8 @@ class SummaryRowTests(unittest.TestCase):
         page=Page(1,1,1,method="ocr")
         page.lines=[
             line(0,.20,"تحليل دم شامل","50.00"),
-            line(1,.215,"الخصم","5.00"),
-            line(2,.23,"أجرة غرفة","50.00"),
+            line(1,.215,"أجرة غرفة","50.00"),
+            line(2,.23,"الخصم","5.00"),
             line(3,.245,"إجمالي الفاتورة","95.00"),
         ]
         bounds=[("total",0,.25),("unit_price",.25,.43),("qty",.43,.55),("name",.55,1)]
@@ -34,7 +34,7 @@ class SummaryRowTests(unittest.TestCase):
         self.assertIsNotNone(t)
         self.assertEqual(len(t.rows),2)
         self.assertEqual([r.cells["name"][0].text for r in t.rows],["تحليل دم شامل","أجرة غرفة"])
-        self.assertTrue({1,3}.issubset(t.line_idxs))
+        self.assertTrue({0,1}.issubset(t.line_idxs))
 
 if __name__=="__main__":
     unittest.main()
