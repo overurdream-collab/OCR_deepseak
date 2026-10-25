@@ -204,10 +204,10 @@ def run_one(cli, model, projector, case, dest, context=4096, max_tokens=500, tim
     return result
 
 
-def run(output_dir, cli, model, projector, shard=0, shards=2):
+def run(output_dir, cli, model, projector, shard=0, shards=2, max_cases=4):
     root = Path(output_dir)
     root.mkdir(parents=True, exist_ok=True)
-    all_items = [new_case(layout, i) for layout, i in CASES]
+    all_items = [new_case(layout, i) for layout, i in CASES[:max_cases]]
     chosen = [v for n, v in enumerate(all_items) if n % shards == shard]
     report = {"status": "incomplete", "version": VERSION,
               "model_id": MODEL_REPO, "weight_file": MODEL_FILE,
@@ -251,10 +251,11 @@ def main():
     parser.add_argument("--projector", required=True)
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=2)
+    parser.add_argument("--max-cases", type=int, default=4)
     a = parser.parse_args()
-    if a.shards < 1 or not (0 <= a.shard < a.shards):
+    if a.shards < 1 or not (0 <= a.shard < a.shards) or not 1 <= a.max_cases <= len(CASES):
         raise SystemExit("invalid shard")
-    run(a.output_dir, a.cli, a.model, a.projector, a.shard, a.shards)
+    run(a.output_dir, a.cli, a.model, a.projector, a.shard, a.shards, a.max_cases)
 
 
 if __name__ == "__main__":
