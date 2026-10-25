@@ -1,0 +1,105 @@
+name: MDIA Qwen3-VL-2B Q4 real CPU visual invoice pilot
+on:
+  push:
+    branches:
+      - experiment/mdia-qwen3-vl-2b-pilot
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  harness-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PDF and font dependencies, no model needed
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-dejavu-core fonts-hosny-amiri tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng
+          python -m pip install -r requirements.txt
+      - name: Run established MDIA regressions and Qwen-specific validation
+        run: |
+          python -m compileall -q scripts/qwen3_vl_invoice_pilot.py
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+
+  real-qwen3-vision:
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    env:
+      HF_HUB_DISABLE_TELEMETRY: '1'
+      HF_HUB_DOWNLOAD_TIMEOUT: '600'
+      HF_HUB_ETAG_TIMEOUT: '60'
+      OMP_NUM_THREADS: '3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install synthetic PDF dependencies and local C++ build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y fonts-dejavu-core fonts-hosny-amiri cmake build-essential pkg-config libcurl4-openssl-dev
+          python -m pip install -r requirements.txt
+          python -m pip install 'huggingface_hub>=0.34,<1'
+      - name: Build official llama.cpp CPU vision CLI from public GitHub source
+        run: |
+          git clone --depth 1 https://github.com/ggml-org/llama.cpp.git third_party/llama.cpp
+          git -C third_party/llama.cpp rev-parse HEAD | tee llama_cpp_source_sha.txt
+          cmake -S third_party/llama.cpp -B third_party/llama.cpp/build \
+            -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DLLAMA_CURL=OFF
+          cmake --build third_party/llama.cpp/build -j 3 --target llama-cli
+          third_party/llama.cpp/build/bin/llama-cli --help | grep -E -- '--mmproj|--image|--no-display-prompt' | head -n 8
+      - name: Download official CPU quantized Qwen3-VL model AND its visual projector
+        run: |
+          python - <<'PY'
+          from huggingface_hub import hf_hub_download
+          model="Qwen/Qwen3-VL-2B-Instruct-GGUF"
+          for name in ("Qwen3VL-2B-Instruct-Q4_K_M.gguf", "mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf"):
+              file=hf_hub_download(repo_id=model,filename=name,local_dir="models")
+              import os
+              print(name,os.path.getsize(file),"bytes")
+              assert os.path.getsize(file)>200_000_000, "incomplete model file"
+          PY
+      - name: Run REAL Qwen3-VL vision inference on 2 medical invoices per shard
+        run: |
+          python -u -m scripts.qwen3_vl_invoice_pilot \
+            --cli third_party/llama.cpp/build/bin/llama-cli \
+            --model models/Qwen3VL-2B-Instruct-Q4_K_M.gguf \
+            --projector models/mmproj-Qwen3VL-2B-Instruct-Q8_0.gguf \
+            --max-cases 4 --shard ${{ matrix.shard }} --shards 2 \
+            --output-dir results/qwen3_vl_shard${{ matrix.shard }}
+      - name: Summarize ALL failures and strictly score each extracted invoice
+        if: always()
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          files=sorted(Path("results").glob("qwen3_vl_shard*/qwen3_vl_results.json"))
+          assert len(files)==1, "missing real Qwen benchmark result"
+          r=json.loads(files[0].read_text("utf-8"))
+          print("QWEN FINAL:",r["status"],r.get("summary"))
+          for row in r["results"]:
+              s=row.get("score") or {}
+              print(row["id"],row["outcome"],f"fields={s.get('correct',0)}/{s.get('expected','NA')}",
+                    "extra_rows",s.get("extra_rows"),"time",row["elapsed_sec"])
+          assert r["summary"]["attempted"]==2, "real model was not evaluated on both expected files"
+          assert r["summary"]["parsed"]>=1, "model produced no valid structured invoice JSON"
+          PY
+      - name: Save synthetic PDFs, visual inputs, full raw responses and errors
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdia-qwen3-vl-real-shard${{ matrix.shard }}
+          path: |
+            results/qwen3_vl_shard${{ matrix.shard }}/
+            llama_cpp_source_sha.txt
+          retention-days: 30
+          if-no-files-found: warn
