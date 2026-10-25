@@ -176,30 +176,22 @@ def validate_document(doc: dict):
                   "warning", record_id=inv["id"], incomplete_item_ids=incomplete,
                   evidence_ids=_ids(inv["invoice_total"]))
 
-    # Optional independent source-evidence reconciliation. Does not change OCR
-    # values or declare them verified: arithmetic consistency is not proof of OCR.
+    # Opt-in: validate each source-anchored value using its OWN evidence_id and
+    # same-row page coordinates. OCR-proposed amounts remain unchanged.
     if os.environ.get("MDIA_EVIDENCE_RECONCILIATION", "0") == "1" and items:
-        from .invoice_reconciliation import reconcile
-        tokens = [e.get("text", "") for e in doc.get("evidence", []) if isinstance(e, dict)]
-        proposals = [{
-            "description": it["service_name"].get("raw"),
-            "quantity": it["quantity"].get("raw"),
-            "unit_price": it["unit_price"].get("raw"),
-            "line_total": it["line_total"].get("raw"),
-        } for it in items]
-        for it, finding in zip(items, reconcile(proposals, tokens)):
-            if finding["review_required"]:
-                _warn(doc, "invoice_source_reconciliation",
-                      "راجع أدلة بند الفاتورة / verify invoice item against source evidence",
-                      "warning", record_id=it["id"], reasons=finding["reasons"],
-                      evidence_ids=_ids(*(it[k] for k in ("service_name", "quantity", "unit_price", "line_total"))))
-                for key, suffix in (("service_name", "description"), ("quantity", "quantity"),
-                                    ("unit_price", "unit_price"), ("line_total", "line_total")):
-                    if any(reason.endswith(suffix) for reason in finding["reasons"]):
-                        _flag(it[key], "source_evidence_review")
-                if "arithmetic_mismatch" in finding["reasons"]:
-                    for key in ("quantity", "unit_price", "line_total"):
-                        _flag(it[key], "arithmetic_mismatch")
+        from .invoice_reconciliation import review_document_evidence
+        for finding in review_document_evidence(doc):
+            it = next((row for row in items if row["id"] == finding["record_id"]), None)
+            if it is None:
+                continue
+            reasons = finding["field_reasons"]
+            _warn(doc, "invoice_source_reconciliation",
+                  "مراجعة دليل الحقول وموقعها في بند الفاتورة / invoice field source and row review",
+                  "warning", record_id=it["id"], field_reasons=reasons,
+                  evidence_ids=_ids(*(it[k] for k in ("service_name", "quantity", "unit_price", "line_total"))))
+            for key, cause in reasons.items():
+                for reason in cause:
+                    _flag(it[key], "source_" + reason)
 
     # 3) probable duplicates (kept, only flagged: repetition is not proof of double billing)
     seen = {}
