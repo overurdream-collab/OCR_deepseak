@@ -1,0 +1,65 @@
+name: MDIA release distribution - Docker and Windows CPU smoke
+on:
+  push:
+    branches:
+      - release/mdia-verified-paddle-core
+    paths:
+      - 'Dockerfile'
+      - 'run_windows.bat'
+      - 'docker-compose.yml'
+      - 'requirements.txt'
+      - '.github/workflows/mdia-release-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  docker-build-start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build actual CPU PaddleOCR Docker distribution
+        run: docker build --progress=plain -t mdia-paddle-smoke .
+      - name: Start MDIA locally and verify schema HTTP response
+        run: |
+          docker run --rm -d --name mdia-paddle-smoke -p 127.0.0.1:18000:8000 mdia-paddle-smoke
+          trap 'docker logs mdia-paddle-smoke || true; docker rm -f mdia-paddle-smoke || true' EXIT
+          READY=0
+          for n in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:18000/api/schema -o /tmp/mdia_schema.json; then
+              READY=1
+              break
+            fi
+            sleep 2
+          done
+          test "$READY" = 1
+          python - <<'PY'
+          import json
+          d=json.load(open('/tmp/mdia_schema.json'))
+          assert isinstance(d,dict)
+          print('MDIA DOCKER API SCHEMA: HEALTHY, keys', list(d)[:8])
+          PY
+      - name: Assert Paddle selected as release default
+        run: |
+          docker inspect mdia-paddle-smoke --format '{{json .Config.Env}}' > /tmp/mdia_env.txt
+          grep -q MDIA_OCR_ENGINE=paddle_arabic /tmp/mdia_env.txt
+          grep -q MDIA_EVIDENCE_RECONCILIATION=1 /tmp/mdia_env.txt
+
+  windows-runtime-import:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install published Windows Paddle CPU runtime
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Verify Arabic OCR runtime imports and startup modules (no inference)
+        shell: pwsh
+        run: |
+          python -c "import paddle; import paddleocr; from mdia.paddle_arabic import result_to_words; import mdia.server; print('WINDOWS PADDLE CPU IMPORT OK',paddle.__version__)"
+          python -m compileall -q mdia
