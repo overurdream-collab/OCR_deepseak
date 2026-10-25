@@ -66,6 +66,23 @@ def header_columns(line: Line):
     return cols if ok else None
 
 
+# High-precision financial summary labels: these are NOT billed services.
+# Match the entire normalized label; avoid generic words such as "room charges".
+_SUMMARY_LABELS = frozenset(match_key(x) for x in (
+    "Subtotal", "Discount", "VAT", "Tax", "Grand Total", "Invoice Total",
+    "Total", "Amount Due", "Net Total", "Balance Due", "Total Paid",
+    "المجموع قبل الخصم", "المجموع", "الخصم", "الضريبة",
+    "اجمالي الفاتورة", "إجمالي الفاتورة", "الإجمالي",
+    "المبلغ المستحق", "صافي المبلغ", "صافي الإجمالي",
+    "الرصيد المستحق", "المدفوع", "الاجمالي النهائي",
+))
+
+
+def _is_summary_label(text: str) -> bool:
+    key = " ".join(match_key(x) for x in text.split())
+    return key in _SUMMARY_LABELS
+
+
 def _is_totals_line(line: Line):
     for p in line_pairs(line):
         if p.id in TOTAL_IDS and p.value_words and all(
@@ -177,6 +194,12 @@ def parse_table(page: Page, header_idx: Optional[int], cols=None, kind=None, bou
             numeric_ok = any(parse_number(_text(cells[c])) is not None for c in NUMERIC_COLS if cells.get(c))
         no_digits = not re.search(r"\d", " ".join(w.text for w in ln.words))
         near = prev_line is not None and (ln.y - prev_line.y) < med * 1.9
+        if t.kind == "invoice" and name and numeric_ok and _is_summary_label(name):
+            # An invoice summary is never a charge row. Keep it available to
+            # independent invoice-total extraction; don't manufacture an item.
+            t.line_idxs.add(ln.idx)
+            prev_row, prev_line = None, ln
+            continue
         if name and numeric_ok:
             row = Row([ln.idx], cells, getattr(t, "_section", None), getattr(t, "_section_words", []), inherited)
             t.rows.append(row)
@@ -270,7 +293,7 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
     from .textutil import parse_number
     rows = []
     for ln in page.lines:
-        if line_pairs(ln) or header_columns(ln):
+        if line_pairs(ln) or header_columns(ln) or _is_summary_label(ln.text):
             continue
         numbers = sorted([w for w in ln.words if w.conf >= .65 and parse_number(w.text) is not None
                           and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)], key=lambda w: w.cx, reverse=True)

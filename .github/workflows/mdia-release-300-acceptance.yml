@@ -1,8 +1,8 @@
-name: MDIA release acceptance - 300 real PaddleOCR invoice PDFs
+name: MDIA Arabic table precision v2 - 300 real OCR
 on:
   push:
     branches:
-      - release/mdia-verified-paddle-core
+      - experiment/mdia-arabic-table-precision-v2
     paths:
       - 'mdia/**'
       - 'tests/**'
