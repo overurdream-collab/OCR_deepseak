@@ -25,9 +25,9 @@ class SummaryRowTests(unittest.TestCase):
         page=Page(1,1,1,method="ocr")
         page.lines=[
             line(0,.20,"تحليل دم شامل","50.00"),
-            line(1,.24,"الخصم","5.00"),
-            line(2,.28,"أجرة غرفة","50.00"),
-            line(3,.32,"إجمالي الفاتورة","95.00"),
+            line(1,.215,"الخصم","5.00"),
+            line(2,.23,"أجرة غرفة","50.00"),
+            line(3,.245,"إجمالي الفاتورة","95.00"),
         ]
         bounds=[("total",0,.25),("unit_price",.25,.43),("qty",.43,.55),("name",.55,1)]
         t=parse_table(page,None,kind="invoice",bounds=bounds,inherited=False,rtl=True)
