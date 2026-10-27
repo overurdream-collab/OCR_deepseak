@@ -146,6 +146,25 @@ def _candidate_lines(page: Page, start: int):
     return out
 
 
+def _invoice_cell_geometry_safe(cells, bounds):
+    """Reject ambiguous invoice rows, never repair a price or move a token.
+
+    A numeric column containing multiple independent OCR tokens is not a
+    reliably located amount. Geometry from a line-wide interpolated OCR box
+    is not trusted for column reassignment. This gate is deliberately
+    conservative and only affects invoice rows, not lab/medicine tables.
+    """
+    for key in ("qty", "unit_price", "total"):
+        ws = cells.get(key, [])
+        if len(ws) > 1:
+            return False
+        if ws and parse_number(ws[0].text) is None:
+            return False
+    # At least two independently printed financial attributes must be
+    # present before a no-header invoice line is considered a billable row.
+    return True
+
+
 def parse_table(page: Page, header_idx: Optional[int], cols=None, kind=None, bounds=None, inherited=False, rtl=None, span=1) -> Optional[Table]:
     start = 0 if header_idx is None else header_idx + span
     data = _candidate_lines(page, start)
@@ -177,6 +196,10 @@ def parse_table(page: Page, header_idx: Optional[int], cols=None, kind=None, bou
             numeric_ok = any(parse_number(_text(cells[c])) is not None for c in NUMERIC_COLS if cells.get(c))
         no_digits = not re.search(r"\d", " ".join(w.text for w in ln.words))
         near = prev_line is not None and (ln.y - prev_line.y) < med * 1.9
+        if t.kind == "invoice" and name and numeric_ok and not _invoice_cell_geometry_safe(cells, bounds):
+            # Do not emit an ungrounded charge from ambiguous cell assignment.
+            prev_row, prev_line = None, ln
+            continue
         if name and numeric_ok:
             row = Row([ln.idx], cells, getattr(t, "_section", None), getattr(t, "_section_words", []), inherited)
             t.rows.append(row)
