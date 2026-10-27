@@ -1,8 +1,8 @@
-name: MDIA release acceptance - 300 real PaddleOCR invoice PDFs
+name: MDIA cell geometry guard 300 OCR acceptance
 on:
   push:
     branches:
-      - release/mdia-verified-paddle-core
+      - experiment/mdia-cell-geometry-guard
     paths:
       - 'mdia/**'
       - 'tests/**'
