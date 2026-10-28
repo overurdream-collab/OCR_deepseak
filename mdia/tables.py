@@ -42,6 +42,29 @@ class Table:
     rtl: bool = False
 
 
+def invoice_cell_review_reasons(cells):
+    """Identify uncertain numeric cells without discarding rows or repairing text."""
+    findings = {}
+    for key in NUMERIC_COLS:
+        ws = cells.get(key, [])
+        if not ws:
+            continue
+        tokens = [w.text.strip() for w in ws
+                  if key in ("qty", "dispensed", "prescribed")
+                  or not CUR_TOKEN_RE.fullmatch(w.text.strip())]
+        if len(tokens) > 1:
+            findings[key] = "multiple_numeric_cell_tokens"
+        elif not tokens:
+            findings[key] = "missing_numeric_cell_token"
+        else:
+            token = tokens[0]
+            if re.fullmatch(r"\([^()]+\)", token):
+                token = token[1:-1]
+            if not is_numeric_token(token) or parse_number(token) is None:
+                findings[key] = "unparseable_numeric_cell_token"
+    return findings
+
+
 def _kind(cols):
     if "name" in cols and cols & {"result", "ref_range"}:
         return "lab"
