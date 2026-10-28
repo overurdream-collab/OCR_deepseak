@@ -33,7 +33,7 @@ class SourcePreservingSpacingTests(unittest.TestCase):
             "status": "extracted", "evidence_id": "source-1",
             "verification": "unverified",
         }, "quantity": {"value": 2}, "unit_price": {"value": 55}}],
-        "evidence": [{"id": "source-1", "matched_text": "تحليل دمشامل"}],
+        "evidence": [{"id": "source-1", "matched_text": "تحليل دمشامل", "method": "ocr"}],
         "requires_human_review": [{"field": "evidence", "reasons": ["paddle_line_geometry_only"]}],
         "warnings": [{"kind": "paddle_line_geometry_only"}]}
         before = copy.deepcopy(d)
@@ -58,6 +58,27 @@ class SourcePreservingSpacingTests(unittest.TestCase):
         old=copy.deepcopy(d)
         repair_document_service_names(d)
         self.assertEqual(d,old)
+
+    def test_digital_pdf_source_is_untouched_even_if_word_boundaries_look_joined(self):
+        item = {"id": "it1", "service_name": {
+            "raw": "CreatinineTest", "value": "CreatinineTest",
+            "status": "extracted", "evidence_id": "s1",
+        }}
+        d = {"invoice_items": [item], "evidence": [
+            {"id": "s1", "method": "text-layer", "matched_text": "CreatinineTest"},
+        ]}
+        prior = copy.deepcopy(d)
+        repair_document_service_names(d)
+        self.assertEqual(d, prior)
+
+    def test_missing_or_untraceable_ocr_evidence_is_untouched(self):
+        d = {"invoice_items": [{"service_name": {
+            "raw": "تخطيطقلب", "value": "تخطيطقلب",
+            "status": "extracted", "evidence_id": "not-present",
+        }}], "evidence": []}
+        before = copy.deepcopy(d)
+        repair_document_service_names(d)
+        self.assertEqual(d, before)
 
     def test_provenance_and_other_clinical_names_not_touched(self):
         d={"invoice_items": [], "patient": {"name": {"raw": "ليلی حسن", "value": "ليلی حسن"}}}
