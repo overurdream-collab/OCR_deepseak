@@ -61,9 +61,16 @@ def repair_service_spacing(value):
 
 def repair_document_service_names(document):
     """Adjust value, never source raw/evidence; no new rows or inferred words."""
+    evidence = {e["id"]: e for e in document.get("evidence", [])
+                if isinstance(e, dict) and e.get("id")}
     for item in document.get("invoice_items", []):
         field = item.get("service_name") or {}
         if field.get("status") != "extracted" or not field.get("evidence_id"):
+            continue
+        # Only correct an OCR segmentation artifact. Never change text born
+        # digital (PDF text layer), hand-entered, or untraceable values.
+        source = evidence.get(field["evidence_id"])
+        if source is None or source.get("method") != "ocr":
             continue
         if not isinstance(field.get("raw"), str) or not isinstance(field.get("value"), str):
             continue
