@@ -182,14 +182,11 @@ def last_amount(s: str, allow_ocr_arabic_comma=False):
     OCR-only U+060C handling MUST be accompanied by a human-review flag.
     The source token is returned verbatim, never rewritten.
     """
-    toks = str(s).split()
+    toks = fix_digits(nfkc(s)).split()
     for tok in reversed(toks):
-        # Compare a normalized COPY but return the exact observed token:
-        # field.raw/evidence must preserve Eastern digits and punctuation.
-        normalized = fix_digits(nfkc(tok))
-        if "%" in normalized or not re.search(r"\d", normalized):
+        if "%" in tok or not re.search(r"\d", tok):
             continue
-        clean = normalized.strip("[]:؛;")  # parentheses remain for negative amounts
+        clean = tok.strip("[]:؛;")  # parentheses remain for negative amounts
         if "،" in clean:
             if allow_ocr_arabic_comma:
                 v = ocr_arabic_comma_decimal(clean)
