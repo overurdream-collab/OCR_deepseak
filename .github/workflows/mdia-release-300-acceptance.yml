@@ -3,7 +3,9 @@ on:
   push:
     branches:
       - experiment/mdia-cell-geometry-guard
+      - fix/mdia-numeric-cell-regression
     paths:
+      - '.github/workflows/mdia-release-300-acceptance.yml'
       - 'mdia/**'
       - 'tests/**'
       - 'scripts/benchmark_invoice300.py'
