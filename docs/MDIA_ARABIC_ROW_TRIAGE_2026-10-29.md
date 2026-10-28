@@ -37,3 +37,29 @@ The isolated real-OCR input trace for `ar_shaped_18`, `ar_mixed_18`, `ar_visual_
 - Re-run all 300 original synthetic PDFs with real PaddleOCR on all six shards, check every previously-correct field, evidence linkage, human review and extra-row count.
 - Report actual new correct / lost fields **by case**, not just an aggregate.
 - No PR merge into `main` until explicit user approval and permitted, anonymized real invoices are evaluated.
+
+## Experiment result — branch head bbc5e5e, 300-PDF six-shard acceptance
+
+**Test run:** [GitHub Actions 40776907768](https://github.com/overurdream-collab/OCR_deepseak/actions/runs/40776907768), all six actual PaddleOCR shards + original frozen gate: **SUCCESS**. Existing MDIA CPU regression / Arabic PDF readiness on [run 40776907716](https://github.com/overurdream-collab/OCR_deepseak/actions/runs/40776907716): **SUCCESS**, **179 tests run (178 passed, 1 skipped)**.
+
+Independently downloaded all six new truth-linked reports and compared them field-for-field against the complete six-shard **91.24%** snapshot from PR #19 / run 40773688662 (not the easier historical 84.75% snapshot). Results:
+
+| Metric | Previous PR #19 | Experimental PR #20 |
+| --- | ---: | ---: |
+| Exact correct / expected | 5,270/5,776 | **5,285/5,776** |
+| Exact synthetic score | 91.24% | **91.50%** |
+| Newly correct fields | — | **15** |
+| Previously correct fields lost | — | **0** |
+| Additional false rows | — | **0** |
+
+The 15 newly exact matches consist of **5 service names, 5 observed unit prices, 5 observed line totals**. The unrelated quantities remain unreadable, not auto-corrected. Improvements occurred exclusively in three known synthetic PDFs:
+
+- `ar_shaped_18`: 11/23 → 17/23 fields, +6 (2 source rows' names/prices/totals).
+- `ar_mixed_18`: 19/27 → 25/27, +6 (2 source rows).
+- `ar_visual_48`: 19/27 → 22/27, +3 (1 source row).
+
+The reference results were not manipulated. Original OCR outputs showed literal Latin `M` in the Arabic quantity column while adjacent prices, totals and clinical service descriptions were intact. The patch in `mdia/tables.py` recovers the *observed text only* if multiple independently parsed neighbor rows establish stable numeric column x positions and same-row tokens pass conservative geometry and confidence tests. It sets the unreadable quantity's text to the original `M`, `status=unreadable`, `verification=needs_review`; it NEVER derives an imagined quantity (even if prices × expected quantity would balance). The raw-source geometry remains interpolated and subject to mandatory human review.
+
+Also prevented summary captions such as `إجمالي الفاتورة` from being treated as billable items when OCR emits the entire caption as a single token instead of separate words. Regression tests cover this false-positive case, low confidence, incorrect column, insufficient anchor rows, unrelated text, and missing unit price.
+
+**NOT approved for financial automation, patient use, or main merge.** The ~91.50% figure is a synthetic benchmark, not guaranteed real-world accuracy. Remaining fields: **491 / 5,776**, of which the lossless 15-field recovery is a precise and reproducible improvement. The project still needs verified field-level source boxes and an independent permitted anonymized set of genuine Arabic medical invoices.
