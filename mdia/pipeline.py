@@ -62,6 +62,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 # only a digit that Tesseract itself visibly recognized.
                 from .quantity_reocr import recover_quantities
                 recover_quantities(d, pdf, seg_pages)
+                # Repair only missing/extraneous word boundaries in a
+                # source-observed medical service label. Preserve raw OCR,
+                # evidence linkage, financial fields and all review alerts.
+                from .service_spacing import repair_document_service_names
+                repair_document_service_names(d)
                 if seg.confidence < 0.35 or seg.type == "unknown":
                     d["warnings"].append({"id": f"{doc_id}-wc", "kind": "low_classification_confidence", "severity": "warning",
                                           "message": f"نوع المستند غير مؤكد ({seg.type}, {seg.confidence}) / document type uncertain"})
