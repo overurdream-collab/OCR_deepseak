@@ -3,7 +3,8 @@ import unittest
 
 from mdia.extract import Ctx
 from mdia.model import Page, Word
-from mdia.textutil import normalize_arabic_ocr_script, uncertain_arabic_ocr_letters
+from mdia.textutil import (has_ambiguous_final_farsi_yeh,
+                           normalize_arabic_ocr_script, uncertain_arabic_ocr_letters)
 from scripts.compare_structured_arabic import row_by_name
 
 
@@ -24,6 +25,52 @@ class ArabicOCRScriptVariantTests(unittest.TestCase):
     def test_does_not_change_real_distinct_arabic_letters_or_digits(self):
         raw = "أجرة غرفة ١٢٥٫٥٠ غ پ گ ة ى"
         self.assertEqual(normalize_arabic_ocr_script(raw), raw)
+
+    def test_farsi_yeh_is_ambiguous_at_end_of_a_word(self):
+        # Persian U+06CC has the same final glyph as Arabic alef maqsura
+        # U+0649, but the same medial glyph as Arabic yeh U+064A.
+        # Neither Arabic target can be inferred from a final/isolated glyph.
+        self.assertEqual(normalize_arabic_ocr_script("کلی"), "كلی")
+        self.assertEqual(normalize_arabic_ocr_script("علی، ی"), "علی، ی")
+        self.assertEqual(normalize_arabic_ocr_script("کلی. علی"), "كلی. علی")
+        self.assertTrue(has_ambiguous_final_farsi_yeh("کلی."))
+        self.assertTrue(has_ambiguous_final_farsi_yeh("ی"))
+
+    def test_farsi_yeh_in_joining_positions_remains_reviewable_arabic_yeh(self):
+        self.assertEqual(normalize_arabic_ocr_script("یوم تحلیل"), "يوم تحليل")
+        self.assertEqual(normalize_arabic_ocr_script("کلیِ ي"), "كلیِ ي")
+        self.assertEqual(normalize_arabic_ocr_script("یَوم"), "يَوم")
+        self.assertFalse(has_ambiguous_final_farsi_yeh("یَوم تحلیل"))
+        self.assertTrue(has_ambiguous_final_farsi_yeh("یء"))
+
+    def test_arabic_kaf_yeh_and_alef_maqsura_keep_distinct_codepoints(self):
+        # Initial/medial/final shapes of kaf are font shaping, not character
+        # substitutions.  The last two spellings are NOT interchangeable.
+        for raw in ("كلى", "كلي", "كِلى", "الكلى", "كلوي"):
+            with self.subTest(raw=raw):
+                self.assertEqual(normalize_arabic_ocr_script(raw), raw)
+                f, _ = field(raw)
+                self.assertEqual(f["raw"], raw)
+                self.assertEqual(f["value"], raw)
+                self.assertNotIn("ambiguous_final_farsi_yeh", f.get("review_reasons", []))
+
+    def test_ambiguous_final_farsi_yeh_requires_review_even_without_rewrite(self):
+        f, ev = field("علی")
+        self.assertEqual(f["raw"], "علی")
+        self.assertEqual(f["value"], "علی")
+        self.assertEqual(f["verification"], "needs_review")
+        self.assertIn("ambiguous_final_farsi_yeh", f["review_reasons"])
+        self.assertNotIn("arabic_ocr_script_variant", f["review_reasons"])
+        self.assertEqual(ev[0]["matched_text"], "علی")
+
+    def test_mixed_kaf_and_ambiguous_yeh_preserves_raw_and_flags_both(self):
+        f, ev = field("کلی")
+        self.assertEqual(f["raw"], "کلی")
+        self.assertEqual(f["value"], "كلی")
+        self.assertEqual(f["verification"], "needs_review")
+        self.assertIn("ambiguous_final_farsi_yeh", f["review_reasons"])
+        self.assertIn("arabic_ocr_script_variant", f["review_reasons"])
+        self.assertEqual(ev[0]["matched_text"], "کلی")
 
     def test_recognizes_other_urdu_persian_letters_without_equating_them(self):
         self.assertEqual(set(uncertain_arabic_ocr_letters("پ چ ژ گ ں ہ ھ ۃ ے")),

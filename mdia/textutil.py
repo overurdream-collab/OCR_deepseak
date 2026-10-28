@@ -16,19 +16,44 @@ def nfkc(s: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
-_ARABIC_OCR_SCRIPT_EQUIVALENTS = str.maketrans({"ک": "ك", "ی": "ي"})
+_ARABIC_OCR_KAF_EQUIVALENT = str.maketrans({"ک": "ك"})
 _BASIC_ARABIC_LETTERS = frozenset("ءآأؤإئابتثجحخدذرزسشصضطظعغفقكلمنهويىة")
 _REVIEWED_EQUIVALENTS = frozenset("کی")
 
 
+def _farsi_yeh_joins_next(s: str, i: int) -> bool:
+    """Only infer an Arabic yeh from a joining initial/medial Farsi glyph.
+
+    U+06CC Farsi yeh visually matches U+064A Arabic yeh in joining forms,
+    but U+0649 alef maqsura in final/isolated forms (Unicode chapter 9).
+    Skip diacritics within the token; whitespace, punctuation and zero-width
+    non-joiners are boundaries.  Keep unclear shapes untouched for review.
+    """
+    for ch in s[i + 1:]:
+        if unicodedata.category(ch).startswith("M") or ch == "\u0640":
+            continue
+        return ch != "ء" and ch in _BASIC_ARABIC_LETTERS | _REVIEWED_EQUIVALENTS
+    return False
+
+
+def has_ambiguous_final_farsi_yeh(s: str) -> bool:
+    """Whether U+06CC could be Arabic ي or ى based on the source glyph."""
+    return any(ch == "ی" and not _farsi_yeh_joins_next(s, i)
+               for i, ch in enumerate(s))
+
+
 def normalize_arabic_ocr_script(s: str) -> str:
-    """Canonical Arabic output for OCR-confused Persian kaf/yeh codepoints.
+    """Conservatively normalize OCR-confused Persian kaf/medial yeh glyphs.
 
     The original OCR text must remain available as `field.raw` and evidence;
     this only normalizes a separate text `value`, with mandatory human review.
+    Never guess whether a final/isolated Farsi yeh means Arabic ي or ى:
+    that can change a medical word such as كلى (kidneys) into كلي.
     Other Persian/Urdu characters that change meaning are never rewritten.
     """
-    return s.translate(_ARABIC_OCR_SCRIPT_EQUIVALENTS)
+    return "".join("ي" if ch == "ی" and _farsi_yeh_joins_next(s, i) else
+                   ch.translate(_ARABIC_OCR_KAF_EQUIVALENT)
+                   for i, ch in enumerate(s))
 
 
 def uncertain_arabic_ocr_letters(s: str) -> list:

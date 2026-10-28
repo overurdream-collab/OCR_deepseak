@@ -12,7 +12,8 @@ from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
-                       parse_number, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters)
+                       parse_number, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters,
+                       has_ambiguous_final_farsi_yeh)
 
 ICD_RE = re.compile(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b")
 STRENGTH_RE = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ml|iu|units?|%|mmol|ملغ|ملجم|مجم|مل|ميكروغرام|وحده)(?!\s*/\s*dl)\b(?:\s*/\s*(\d+(?:[.,]\d+)?)?\s*(ml|mg|g|مل))?")
@@ -128,13 +129,16 @@ class Ctx:
                 status = "unreadable" if n in ("no_date_found", "invalid_date") else "ambiguous"
                 reasons.append(n)
         elif kind == "text" and page.method == "ocr":
-            # Paddle Arabic recognition may use Persian ي/ك lookalikes. Preserve
-            # the recognized source exactly, but offer canonical Arabic as a
-            # separately reviewable value (never for money or quantities).
+            # Paddle Arabic recognition may emit Persian yeh/kaf codepoints.
+            # A final/isolated Farsi yeh can be Arabic ي OR ى; never decide
+            # from that glyph alone (e.g. kidney term كلى vs adjective كلي).
+            # Always preserve source evidence and never rewrite financial data.
             normalized = normalize_arabic_ocr_script(raw_text)
             if normalized != raw_text:
                 value = normalized
                 reasons.append("arabic_ocr_script_variant")
+            if has_ambiguous_final_farsi_yeh(raw_text):
+                reasons.append("ambiguous_final_farsi_yeh")
             if uncertain_arabic_ocr_letters(raw_text):
                 # An Urdu/Persian letter is NOT proof of its visually similar
                 # Arabic counterpart. Keep it verbatim and require a reviewer.
@@ -151,6 +155,7 @@ class Ctx:
             conf = round(conf * 0.5, 3)
         verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted"
                                           or "arabic_ocr_script_variant" in reasons
+                                          or "ambiguous_final_farsi_yeh" in reasons
                                           or "ocr_extended_arabic_letter" in reasons) else "unverified"
         f = {"raw": raw_text, "value": value, "evidence_id": eid, "page": page.number, "confidence": conf,
              "status": status, "verification": verification}
