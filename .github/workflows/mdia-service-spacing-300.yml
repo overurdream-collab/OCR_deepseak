@@ -1,0 +1,92 @@
+name: MDIA source-faithful medical service names - 300 invoices
+on:
+  pull_request:
+    paths:
+      - 'mdia/service_spacing.py'
+      - 'mdia/pipeline.py'
+      - 'tests/test_service_spacing.py'
+      - '.github/workflows/mdia-service-spacing-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-paddle-300:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Run all regressions and Arabic PDF readiness
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+      - name: Compare real OCR of 50 original synthetic PDF invoices
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/spacing_shard${{ matrix.shard }}
+      - name: Fail closed on incomplete document or model failure
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          result=json.loads(next(Path("results").glob("spacing_shard*/results.json")).read_text("utf-8"))
+          assert result["status"]=="completed_real_ocr"
+          assert len(result["results"])==50 and not result["failure_records"]
+          assert all(r["real_paddle_detected"] for r in result["results"])
+          print(result["shard"], result["summary"]["paddle_arabic"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-spacing-shard${{ matrix.shard }}
+          path: results/spacing_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  strict-frozen-300:
+    needs: real-paddle-300
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-spacing-shard*
+          path: candidate
+      - name: Existing synthetic accuracy and evidence gate
+        run: python -m scripts.check_invoice300_acceptance candidate/*/results.json
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40784369818
+          github-token: ${{ github.token }}
+          pattern: mdia-missing-shard*
+          path: baseline
+      - name: Reject ANY previously correct field lost or new extra row
+        run: |
+          python -m scripts.compare_missing_field300 \
+            --previous baseline/*/results.json \
+            --current candidate/*/results.json \
+            --output results/service_spacing_fieldwise.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-service-spacing-fieldwise-proof
+          path: results/service_spacing_fieldwise.json
+          retention-days: 14
+          if-no-files-found: warn
