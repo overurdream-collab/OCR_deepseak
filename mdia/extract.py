@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 
 from . import config
 from .kv import KV, line_pairs, page_pairs
+from .total_candidates import is_isolated_total
 from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
@@ -381,7 +382,8 @@ class Extractor:
                          ("balance_due", "fin.balance"), ("patient_share", "fin.patient_share"), ("claimed_total", "fin.claimed")]:
             cands = []
             for no, kv in self.all_pairs({fid}):
-                if kv.value_words and last_amount(kv.value_text)[1] is not None:
+                if (kv.value_words and last_amount(kv.value_text, allow_ocr_arabic_comma=self.pages[no].method == "ocr")[1] is not None
+                        and (key != "invoice_total" or is_isolated_total(kv))):
                     cands.append(self.ctx.field(self.pages[no], kv.value_words, kind="money", source=_line_text(kv.line)))
             if not cands:
                 totals[key] = _nf()
