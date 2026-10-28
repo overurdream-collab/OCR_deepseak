@@ -344,6 +344,17 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                     for fp in store.path(jid, "pages").glob("*.json"):
                         flags.append(json.loads(fp.read_text("utf-8")).get("flags", {}))
                     record = score_record(c, result, engine, flags)
+                    # Synthetic-only diagnostic evidence: retain the original
+                    # extraction and OCR words before the temporary store is
+                    # removed, so failures can be reproduced without another OCR run.
+                    if record["matched"] < record["total"] or record["extra_item_rows"] or record["page_failures"]:
+                        detail_dir = output_dir / "failure_details"
+                        detail_dir.mkdir(exist_ok=True)
+                        detail = {"case": c, "score": record, "result": result,
+                                  "ocr_pages": [json.loads(fp.read_text("utf-8"))
+                                                for fp in sorted(store.path(jid, "pages").glob("*.json"))]}
+                        (detail_dir / f"{engine}_{c['id']}.json").write_text(
+                            json.dumps(detail, ensure_ascii=False, indent=2), "utf-8")
                     record["printed_discrepancy"] = c["printed_discrepancy"]
                     record["ocr_enhancement"] = engine == "paddle_arabic_enhanced"
                     record["arithmetic_warnings"] = sorted({w.get("kind") for d in (result or {}).get("documents", []) for w in d.get("warnings", []) if ("mismatch" in w.get("kind", "") or "invoice_item" in w.get("kind", ""))})
