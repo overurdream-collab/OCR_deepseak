@@ -7,6 +7,11 @@ on:
       - 'scripts/diagnose_arabic_decimal_ocr.py'
       - 'tests/test_diagnose_arabic_decimal_ocr.py'
       - '.github/workflows/mdia-arabic-decimal-diagnostic.yml'
+  pull_request:
+    paths:
+      - 'scripts/diagnose_arabic_decimal_ocr.py'
+      - 'tests/test_diagnose_arabic_decimal_ocr.py'
+      - '.github/workflows/mdia-arabic-decimal-diagnostic.yml'
   workflow_dispatch:
 permissions:
   contents: read
