@@ -84,6 +84,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                      "laboratory_tests": [], "imaging": [], "procedures": [], "hospitalization": {}, "evidence": [],
                      "warnings": [{"id": f"{doc_id}-wf", "kind": "extraction_failed", "severity": "error", "message": f"{type(e).__name__}: {e}"}],
                      "requires_human_review": []}
+            # Keep all safety review requirements intact; expose a separate
+            # prioritized worklist so source-geometry warnings do not masquerade
+            # as transcription/financial errors.
+            from .review_triage import triage_document
+            d["review_triage"] = triage_document(d)
             docs.append(d)
         failed_pages = [p.number for p in pages if any(w["kind"] == "page_failed" for w in p.warnings)]
         result = {
