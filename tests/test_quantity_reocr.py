@@ -130,6 +130,41 @@ class IndependentQuantityTests(unittest.TestCase):
         d=run([read("3",.70),read("3",.72,mode="contrast4x")])
         self.assertEqual(d["invoice_items"][0]["quantity"]["value"],3.0)
 
+    def test_source_seen_w_h_r_i_letters_are_reread_not_mapped(self):
+        examples=(("w","4"),("H","3"),("R","3"),("I","1"))
+        for original,digit in examples:
+            with self.subTest(source_ocr=original):
+                d=doc()
+                d["invoice_items"][0]["quantity"]["raw"]=original
+                d["evidence"][0]["matched_text"]=original
+                d["evidence"][0]["text"]=original
+                d["invoice_items"][0]["line_total"]["value"]=float(
+                    int(digit)*59.25)
+                result=run([read(digit,.96),read(digit,.9,mode="contrast4x")],d)
+                qty=result["invoice_items"][0]["quantity"]
+                self.assertEqual(qty["raw"],digit)
+                self.assertEqual(qty["value"],float(digit))
+                self.assertEqual(qty["original_ocr_raw"],original)
+                self.assertEqual(result["evidence"][0]["matched_text"],original)
+
+    def test_punctuation_glyphs_are_never_rewritten(self):
+        for glyph in ("-","–","\\\\","°","/"):
+            with self.subTest(glyph=glyph):
+                d=doc()
+                d["invoice_items"][0]["quantity"]["raw"]=glyph
+                d["evidence"][0]["matched_text"]=glyph
+                result=run([read(),read(mode="contrast4x")],d)
+                self.assertEqual(result["invoice_items"][0]["quantity"]["status"],"unreadable")
+                self.assertEqual(len(result["evidence"]),1)
+
+    def test_secondary_ocr_still_needs_source_and_independent_arithmetic(self):
+        d=doc()
+        d["invoice_items"][0]["quantity"]["raw"]="w"
+        d["evidence"][0]["matched_text"]="w"
+        d["invoice_items"][0]["line_total"]["value"]=190.25
+        out=run([read("4",.99),read("4",.99,mode="contrast4x")],d)
+        self.assertIsNone(out["invoice_items"][0]["quantity"]["value"])
+
     def test_multiple_rows_cannot_borrow_another_quantity(self):
         d=doc()
         wrong=copy.deepcopy(d["invoice_items"][0])
