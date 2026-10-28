@@ -1,0 +1,50 @@
+name: MDIA trace Arabic OCR decimal separators - synthetic only
+on:
+  push:
+    branches:
+      - feat/mdia-ppstructure-review-gate
+    paths:
+      - 'scripts/diagnose_arabic_decimal_ocr.py'
+      - 'tests/test_diagnose_arabic_decimal_ocr.py'
+      - '.github/workflows/mdia-arabic-decimal-diagnostic.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-ocr-decimal-diagnosis:
+    strategy:
+      fail-fast: false
+      matrix:
+        sample_set: [0, 1]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free CPU OCR and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Test diagnostic against known synthetic errors
+        run: python -m unittest tests.test_diagnose_arabic_decimal_ocr -v
+      - name: Re-run actual PaddleOCR on 2 synthetic Arabic invoices in original and enhanced modes
+        run: |
+          if [ "${{ matrix.sample_set }}" = "0" ]; then
+            python -u -m scripts.diagnose_arabic_decimal_ocr --cases ar_mixed_26 ar_shaped_26 --output results/decimal_trace.json
+          else
+            python -u -m scripts.diagnose_arabic_decimal_ocr --cases ar_visual_32 ar_mixed_42 --output results/decimal_trace.json
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-decimal-trace-synthetic-${{ matrix.sample_set }}
+          path: results/decimal_trace.json
+          retention-days: 7
+          if-no-files-found: error
