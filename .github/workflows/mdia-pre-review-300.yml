@@ -1,0 +1,96 @@
+name: MDIA pre-review auto repair - full 300 invoice acceptance
+on:
+  pull_request:
+    paths:
+      - 'mdia/extract.py'
+      - 'mdia/total_candidates.py'
+      - 'mdia/review_triage.py'
+      - 'mdia/pipeline.py'
+      - 'tests/test_total_candidates.py'
+      - 'tests/test_review_triage.py'
+      - 'scripts/compare_pre_review_300.py'
+      - '.github/workflows/mdia-pre-review-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-ocr-300:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR engines and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: All program regressions and Arabic PDF readiness
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+      - name: Process 50 original synthetic PDFs with true PaddleOCR and Tesseract
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/pre_review_shard${{ matrix.shard }}
+      - name: Require genuine complete model run
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(next(Path("results").glob("pre_review_shard*/results.json")).read_text("utf-8"))
+          assert r["status"]=="completed_real_ocr" and len(r["results"])==50
+          assert not r["failure_records"]
+          assert all(x["real_paddle_detected"] for x in r["results"])
+          print(r["shard"],r["summary"]["paddle_arabic"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-pre-review-shard${{ matrix.shard }}
+          path: results/pre_review_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  strict-300-comparison:
+    needs: real-ocr-300
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-pre-review-shard*
+          path: candidate
+      - name: Require frozen benchmark acceptance
+        run: python -m scripts.check_invoice300_acceptance candidate/*/results.json
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40779714961
+          github-token: ${{ github.token }}
+          pattern: mdia-quantity-shard*
+          path: previous
+      - name: Reject loss of any previously correct field, missing evidence, or false row
+        run: |
+          python -m scripts.compare_pre_review_300 \
+            --previous previous/*/results.json \
+            --current candidate/*/results.json \
+            --output results/pre_review_evidence.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-pre-review-comparison
+          path: results/pre_review_evidence.json
+          retention-days: 14
+          if-no-files-found: warn
