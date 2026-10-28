@@ -68,11 +68,11 @@ class IndependentQuantityTests(unittest.TestCase):
         self.assertEqual(len(d["evidence"]),1)
 
     def test_misread_digit_with_matching_price_is_not_enough(self):
-        d=run([read("5",.99)])
+        d=run([read("5",.99),read("5",.91,mode="contrast4x")])
         self.assertIsNone(d["invoice_items"][0]["quantity"]["value"])
 
     def test_weak_ocr_cannot_override_original_m(self):
-        d=run([read(conf=.72),read(conf=.67,mode="contrast4x")])
+        d=run([read(conf=.62),read(conf=.67,mode="contrast4x")])
         self.assertEqual(d["invoice_items"][0]["quantity"]["status"],"unreadable")
 
     def test_different_high_confidence_numerals_block(self):
@@ -85,7 +85,7 @@ class IndependentQuantityTests(unittest.TestCase):
                 d=doc()
                 d["invoice_items"][0]["quantity"]["raw"]=raw
                 before=copy.deepcopy(d)
-                run([read()],d)
+                run([read(),read(mode="contrast4x")],d)
                 self.assertEqual(d,before)
 
     def test_no_discount_assumption(self):
@@ -100,7 +100,7 @@ class IndependentQuantityTests(unittest.TestCase):
         self.assertEqual(d["invoice_items"][0]["quantity"]["status"],"unreadable")
 
     def test_no_geometry_if_secondary_token_outside_original_line(self):
-        d=run([read(bbox=[.47,.25,.48,.26])])
+        d=run([read(bbox=[.47,.25,.48,.26]),read(bbox=[.47,.25,.48,.26],mode="contrast4x")])
         self.assertEqual(d["invoice_items"][0]["quantity"]["status"],"unreadable")
 
     def test_ocr_failure_is_local_not_document_failure(self):
@@ -118,9 +118,17 @@ class IndependentQuantityTests(unittest.TestCase):
             self.assertEqual(d["invoice_items"][0]["quantity"]["status"],"unreadable")
 
     def test_arabic_digits_from_second_ocr_are_accepted_when_confident(self):
-        d=run([read("٣",.98)])
+        d=run([read("٣",.98),read("٣",.77,mode="contrast4x")])
         self.assertEqual(d["invoice_items"][0]["quantity"]["value"],3.0)
         self.assertEqual(d["invoice_items"][0]["quantity"]["raw"],"٣")
+
+    def test_repeated_ocr_on_same_preprocessing_is_not_independent_confirmation(self):
+        d=run([read("3",.99),read("3",.97)])
+        self.assertEqual(d["invoice_items"][0]["quantity"]["status"],"unreadable")
+
+    def test_source_observation_can_be_recovered_at_moderate_confidence_if_reproducible(self):
+        d=run([read("3",.70),read("3",.72,mode="contrast4x")])
+        self.assertEqual(d["invoice_items"][0]["quantity"]["value"],3.0)
 
     def test_multiple_rows_cannot_borrow_another_quantity(self):
         d=doc()
