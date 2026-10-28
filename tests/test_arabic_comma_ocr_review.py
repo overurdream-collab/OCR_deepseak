@@ -26,10 +26,10 @@ class ArabicCommaReviewTests(unittest.TestCase):
     def test_explicit_ocr_arabic_comma_is_candidate_not_approved(self):
         f, ev = field("٣٩٨،٢٥")
         self.assertEqual(f["value"], 398.25)
-        self.assertEqual(f["raw"], "٣٩٨،٢٥")
+        self.assertEqual(f["raw"], "398،25")  # numeric raw follows existing normalized-digit API
         self.assertEqual(f["verification"], "needs_review")
         self.assertIn("ocr_arabic_comma_decimal_candidate", f["review_reasons"])
-        self.assertEqual(ev[0]["matched_text"], "٣٩٨،٢٥")
+        self.assertEqual(ev[0]["text"], "٣٩٨،٢٥")  # original source evidence untouched
         self.assertFalse(ev[0]["word_box_verified"])
 
     def test_ocr_number_has_same_review_requirement(self):
@@ -45,7 +45,7 @@ class ArabicCommaReviewTests(unittest.TestCase):
     def test_bare_digits_must_not_be_repaired_by_guessing(self):
         f, _ = field("٢٥٦٢٥")
         self.assertEqual(f["value"], 25625.0)
-        self.assertEqual(f["raw"], "٢٥٦٢٥")
+        self.assertEqual(f["raw"], "25625")  # no decimal point inferred
         self.assertNotIn("ocr_arabic_comma_decimal_candidate", f.get("review_reasons", []))
         self.assertIsNone(ocr_arabic_comma_decimal("٢٥٦٢٥"))
 
