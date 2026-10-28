@@ -1,0 +1,100 @@
+name: MDIA Arabic ambiguous OCR rows - safe 300-PDF trial
+on:
+  pull_request:
+    paths:
+      - 'mdia/tables.py'
+      - 'tests/test_arabic_ambiguous_rows.py'
+      - 'scripts/compare_ambiguous_rows300.py'
+      - '.github/workflows/mdia-ambiguous-rows-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  quick-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify fields, review safeguards and candidate geometry
+        run: |
+          python -m unittest tests.test_arabic_missing_rows tests.test_arabic_ambiguous_rows tests.test_quantity_reocr -v
+  full-real-ocr:
+    needs: quick-proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install local PaddleOCR and Tesseract only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Run 50 actual original synthetic PDF cases
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/ambiguous_rows_shard${{ matrix.shard }}
+      - name: Reject failed OCR or partial shard
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          j=json.loads(next(Path("results").glob("ambiguous_rows_shard*/results.json")).read_text("utf-8"))
+          assert j["status"]=="completed_real_ocr" and len(j["results"])==50
+          assert not j["failure_records"]
+          assert all(x["real_paddle_detected"] for x in j["results"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-ambiguous-shard${{ matrix.shard }}
+          path: results/ambiguous_rows_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  strict-comparison:
+    needs: full-real-ocr
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-ambiguous-shard*
+          path: candidate
+      - name: Require all original synthetic cases
+        run: python -m scripts.check_invoice300_acceptance candidate/*/results.json
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40786930681
+          github-token: ${{ github.token }}
+          pattern: mdia-spacing-shard*
+          path: baseline
+      - name: Prove no previously correct field lost, fabricated row or absent evidence
+        run: |
+          python -m scripts.compare_ambiguous_rows300 \
+            --previous baseline/*/results.json \
+            --current candidate/*/results.json \
+            --output results/arabic_ambiguous_fieldwise.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-ambiguous-row-comparison
+          path: results/arabic_ambiguous_fieldwise.json
+          retention-days: 14
+          if-no-files-found: warn

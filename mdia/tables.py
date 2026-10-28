@@ -360,9 +360,15 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
                     continue
                 if line_pairs(ln) or header_columns(ln):
                     continue
-                # A letter-shaped OCR glyph is *not* a numeric assertion.
-                # This pilot only covers the reproduced literal M failure.
-                unreadable = [w for w in ln.words if w.text == "M"
+                # Source-Paddle traces also contain H, w, R and I in the
+                # printed numeric quantity column. Such letters are NOT
+                # numbers: retain each raw glyph as unreadable and allow the
+                # separate original-PDF re-OCR guard to confirm a digit later.
+                # Do not accept punctuation/dashes, ordinary Arabic words,
+                # or characters merely guessed from mathematical totals.
+                from .quantity_reocr import ELIGIBLE_OCR_GLYPHS
+                observed_ambiguous = ELIGIBLE_OCR_GLYPHS & {"M", "H", "w", "R", "I"}
+                unreadable = [w for w in ln.words if w.text in observed_ambiguous
                               and w.conf >= .65 and abs(w.cx - anchors["qty"]) <= .025]
                 if len(unreadable) != 1:
                     continue
