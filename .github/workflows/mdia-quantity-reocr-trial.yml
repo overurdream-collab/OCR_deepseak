@@ -1,0 +1,36 @@
+name: MDIA independent quantity OCR diagnostic
+on:
+  pull_request:
+    paths:
+      - 'scripts/diagnose_quantity_reocr.py'
+      - '.github/workflows/mdia-quantity-reocr-trial.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR engines and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Examine secondary OCR of original PDF pixels, not inferred quantity
+        run: |
+          python -u -m scripts.diagnose_quantity_reocr --output results/quantity_reocr.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-quantity-reocr-synthetic
+          path: results/quantity_reocr.json
+          retention-days: 7
+          if-no-files-found: error
