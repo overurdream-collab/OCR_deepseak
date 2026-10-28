@@ -10,7 +10,7 @@ from . import config
 from .kv import KV, line_pairs, page_pairs
 from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
-from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
+from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows, invoice_cell_review_reasons
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
                        parse_number)
 
@@ -410,6 +410,28 @@ class Extractor:
                     "paid_amount": F("paid", "money"), "patient_share": F("patient_share", "money"),
                     "section": row.section,
                 }
+                columns = {"qty": "quantity", "unit_price": "unit_price", "total": "line_total",
+                           "discount": "discount", "claimed": "claimed_amount", "paid": "paid_amount",
+                           "patient_share": "patient_share"}
+                for col, reason in invoice_cell_review_reasons(row.cells).items():
+                    if col not in columns:
+                        continue
+                    key = columns[col]
+                    # Retain the previous extraction as an unapproved candidate.
+                    # Keep the WHOLE cell as additional evidence so a last-token
+                    # money parser cannot hide other printed numeric candidates.
+                    ws = row.cells[col]
+                    raw_cell = join_words(sorted(ws, key=lambda w: w.x0), t.rtl)
+                    eid = self.ctx.evidence_for(p, ws, raw_cell, src, mult=mult)
+                    for field in (it[key], it["service_name"]):
+                        field["verification"] = "needs_review"
+                        reasons = field.setdefault("review_reasons", [])
+                        if reason not in reasons:
+                            reasons.append(reason)
+                    self.ctx.warn("ambiguous_invoice_cell",
+                                  "خلية رقمية غامضة؛ حُفظ البند للمراجعة دون تعديل المبلغ / ambiguous numeric cell; row retained for review",
+                                  record_id=it["id"], field=key, reason=reason,
+                                  cell_raw=raw_cell, evidence_ids=[eid])
                 items.append(it)
                 self.item_rows[it["id"]] = (it, p, row, src)
                 sec = match_key(row.section or "")
