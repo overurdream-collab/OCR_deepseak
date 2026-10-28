@@ -12,7 +12,7 @@ from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
-                       parse_number, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters,
+                       parse_number, ocr_arabic_comma_decimal, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters,
                        has_ambiguous_final_farsi_yeh)
 
 ICD_RE = re.compile(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b")
@@ -107,16 +107,24 @@ class Ctx:
         value, status, reasons = raw_text, "extracted", []
         ev_words = words
         if kind == "money":
-            tok, num = last_amount(raw_text)
+            tok, num = last_amount(raw_text, allow_ocr_arabic_comma=page.method == "ocr")
             if num is not None:
                 raw_text = tok.strip(":؛;")
                 value = float(num)
                 ev_words = [w for w in words if w.text.strip(":؛;") == raw_text] or words
+                if page.method == "ocr" and ocr_arabic_comma_decimal(raw_text) is not None:
+                    # OCR may confuse the Arabic punctuation comma with an
+                    # actual printed decimal separator. A candidate, NOT a
+                    # verified monetary amount; retain evidence and review.
+                    reasons.append("ocr_arabic_comma_decimal_candidate")
             else:
                 value, status = None, "unreadable"
                 reasons.append("unparseable_number")
         elif kind == "number":
-            num = parse_number(raw_text)
+            num = (ocr_arabic_comma_decimal(raw_text) if page.method == "ocr"
+                   else None) if "،" in raw_text else parse_number(raw_text)
+            if num is not None and "،" in raw_text:
+                reasons.append("ocr_arabic_comma_decimal_candidate")
             if num is None:
                 value, status = None, "unreadable"
                 reasons.append("unparseable_number")
@@ -156,7 +164,8 @@ class Ctx:
         verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted"
                                           or "arabic_ocr_script_variant" in reasons
                                           or "ambiguous_final_farsi_yeh" in reasons
-                                          or "ocr_extended_arabic_letter" in reasons) else "unverified"
+                                          or "ocr_extended_arabic_letter" in reasons
+                                          or "ocr_arabic_comma_decimal_candidate" in reasons) else "unverified"
         f = {"raw": raw_text, "value": value, "evidence_id": eid, "page": page.number, "confidence": conf,
              "status": status, "verification": verification}
         if reasons:
