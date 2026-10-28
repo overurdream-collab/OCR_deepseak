@@ -297,6 +297,11 @@ def score_record(c, result, engine, flags):
         "page_failures": faults,
         "real_paddle_detected": any(f.get("ocr_engine") == "paddleocr-v5-arabic" for f in flags),
         "review_required": bool(doc.get("requires_human_review")),
+        "ambiguous_cell_warnings": sum(w.get("kind") == "ambiguous_invoice_cell"
+                                       for w in doc.get("warnings", [])),
+        "ambiguous_cell_review_fields": sum(any(reason in (
+            "multiple_numeric_cell_tokens", "missing_numeric_cell_token", "unparseable_numeric_cell_token")
+            for reason in entry.get("reasons", [])) for entry in doc.get("requires_human_review", [])),
         "checks": checks,
     }
 
@@ -339,6 +344,17 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                     for fp in store.path(jid, "pages").glob("*.json"):
                         flags.append(json.loads(fp.read_text("utf-8")).get("flags", {}))
                     record = score_record(c, result, engine, flags)
+                    # Synthetic-only diagnostic evidence: retain the original
+                    # extraction and OCR words before the temporary store is
+                    # removed, so failures can be reproduced without another OCR run.
+                    if record["matched"] < record["total"] or record["extra_item_rows"] or record["page_failures"]:
+                        detail_dir = output_dir / "failure_details"
+                        detail_dir.mkdir(exist_ok=True)
+                        detail = {"case": c, "score": record, "result": result,
+                                  "ocr_pages": [json.loads(fp.read_text("utf-8"))
+                                                for fp in sorted(store.path(jid, "pages").glob("*.json"))]}
+                        (detail_dir / f"{engine}_{c['id']}.json").write_text(
+                            json.dumps(detail, ensure_ascii=False, indent=2), "utf-8")
                     record["printed_discrepancy"] = c["printed_discrepancy"]
                     record["ocr_enhancement"] = engine == "paddle_arabic_enhanced"
                     record["arithmetic_warnings"] = sorted({w.get("kind") for d in (result or {}).get("documents", []) for w in d.get("warnings", []) if ("mismatch" in w.get("kind", "") or "invoice_item" in w.get("kind", ""))})
@@ -363,6 +379,8 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                 "financial_mismatch_warnings": sum(bool(x.get("arithmetic_warnings")) for x in group),
                 "incomplete_invoice_item_warnings": sum("incomplete_invoice_item" in x.get("arithmetic_warnings", []) for x in group),
                 "failures": sum(bool(x.get("runtime_error")) for x in group),
+                "ambiguous_cell_warnings": sum(x.get("ambiguous_cell_warnings", 0) for x in group),
+                "ambiguous_cell_review_fields": sum(x.get("ambiguous_cell_review_fields", 0) for x in group),
             }
         layouts = defaultdict(dict)
         for eng in engines:

@@ -193,6 +193,11 @@ def validate_document(doc: dict):
                 for reason in causes:
                     _flag(it[key], "source_" + reason)
 
+    # Arithmetic agreement cannot resolve competing source tokens in a cell.
+    # Run after arithmetic verification so the total also remains under review.
+    if inv and any(w["kind"] == "ambiguous_invoice_cell" for w in doc["warnings"]):
+        _flag(inv["invoice_total"], "ambiguous_invoice_cells")
+
     # 3) probable duplicates (kept, only flagged: repetition is not proof of double billing)
     seen = {}
     for it in items:
