@@ -3,7 +3,9 @@ on:
   push:
     branches:
       - release/mdia-verified-paddle-core
+      - validation/mdia-pr17-unicode300
     paths:
+      - '.github/workflows/mdia-release-300-acceptance.yml'
       - 'mdia/**'
       - 'tests/**'
       - 'scripts/benchmark_invoice300.py'
@@ -62,8 +64,8 @@ jobs:
         if: always()
         with:
           name: mdia-release-evidence-shard${{ matrix.shard }}
-          path: results/release_paddle_shard${{ matrix.shard }}/
-          retention-days: 30
+          path: results/release_paddle_shard${{ matrix.shard }}/results.json
+          retention-days: 7
           if-no-files-found: error
   acceptance-gate:
     name: Frozen 300-invoice non-regression gate
