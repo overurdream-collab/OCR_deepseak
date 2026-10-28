@@ -1,9 +1,10 @@
-name: MDIA release acceptance - 300 real PaddleOCR invoice PDFs
+name: MDIA cell review - 300 synthetic invoice PaddleOCR evaluation
 on:
   push:
     branches:
-      - release/mdia-verified-paddle-core
+      - experiment/mdia-cell-review
     paths:
+      - '.github/workflows/mdia-release-300-acceptance.yml'
       - 'mdia/**'
       - 'tests/**'
       - 'scripts/benchmark_invoice300.py'
