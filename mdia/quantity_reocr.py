@@ -14,7 +14,7 @@ from .textutil import fix_digits
 # A stringent opt-in class of errors: Paddle misrecognized a quantity glyph
 # as ASCII M, while 2+ other row fields are separately visible and parseable.
 CONFLICT_CONFIDENCE = 0.80
-ACCEPT_CONFIDENCE = 0.85
+ACCEPT_CONFIDENCE = 0.70
 MIN_CORROBORATION = 0.65
 
 
@@ -101,8 +101,8 @@ def choose_digit(reads, price, total, orig_token="M"):
     """Approve only source-read integer corroborated by printed row arithmetic.
 
     No arithmetic-only inference; no two different high-conf OCR digits.
-    The same Tesseract model across preprocessing modes isn't independent
-    proof twice, so at least one actual high-conf OCR output is mandatory.
+    Two separate preprocessing passes must independently recognize the same
+    numeral in original pixels. Arithmetic is only a corroborating guard.
     """
     if orig_token!="M":
         return None
@@ -128,9 +128,15 @@ def choose_digit(reads, price, total, orig_token="M"):
     agreeing=[x for x in candidates if x[1]>=MIN_CORROBORATION and x[0]*price==total]
     if not agreeing or max(x[1] for x in agreeing)<ACCEPT_CONFIDENCE:
         return None
-    # A disagreement even if slightly below the acceptance threshold is
-    # evidence of ambiguity, not a reason to pick the convenient number.
-    winning=max(agreeing,key=lambda x:x[1])
+    # Require reproducible recognition of the very same physical numeral
+    # from BOTH original pixels and independently enhanced pixels. Two PSMs
+    # on one image alone do not qualify. Arithmetic is only a corroboration.
+    original={x[0] for x in agreeing if x[2].get("mode")=="original"}
+    enhanced={x[0] for x in agreeing if x[2].get("mode")=="contrast4x"}
+    if not (original & enhanced):
+        return None
+    winning=max((x for x in agreeing if x[0] in (original & enhanced)),
+                key=lambda x:x[1])
     if any(x[0]!=winning[0] and x[1]>=CONFLICT_CONFIDENCE for x in candidates):
         return None
     return winning[2]
