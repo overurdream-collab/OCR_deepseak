@@ -155,13 +155,14 @@ def _invoice_cell_geometry_safe(cells, bounds):
     conservative and only affects invoice rows, not lab/medicine tables.
     """
     for key in ("qty", "unit_price", "total"):
-        ws = cells.get(key, [])
+        # Printed currency labels are not separate amounts. Only ignore a
+        # complete currency token; unknown text still makes the cell unsafe.
+        ws = [w for w in cells.get(key, [])
+              if key == "qty" or not CUR_TOKEN_RE.fullmatch(w.text.strip())]
         if len(ws) > 1:
             return False
         if ws and parse_number(ws[0].text) is None:
             return False
-    # At least two independently printed financial attributes must be
-    # present before a no-header invoice line is considered a billable row.
     return True
 
 
