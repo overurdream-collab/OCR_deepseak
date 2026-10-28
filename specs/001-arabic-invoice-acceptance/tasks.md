@@ -47,10 +47,12 @@
 
 ### Tests for User Story 2
 
+- [x] T008a [US2] Reproduce OCR-split Arabic service/numeric lines and test both vertical orders, source evidence, human review, neighboring-row isolation, summary labels, overlapping geometry and ambiguous extra numbers in `tests/test_arabic_unheaded_fragments.py`.
 - [ ] T008 [US2] Add tests for multi-token signed amounts, Arabic/English summary rows and actual services in `tests/test_invoice_table_precision.py` (FR-005, FR-006, FR-008, SC-004).
 
 ### Implementation for User Story 2
 
+- [x] T009a [US2] Recover disjoint, adjacent OCR fragments in `unheaded_arabic_invoice_rows` using observed tokens only; preserve both source line IDs and mandatory review. Focused and full unit suites pass; actual Paddle 300-case delta remains **unmeasured**.
 - [ ] T009 [US2] Refine `mdia/tables.py` only after the focused tests fail on an actual defect; keep suspect rows for review and do not invent monetary values (FR-005, FR-006).
 - [ ] T010 [US2] Run the six-shard real PaddleOCR benchmark with `scripts/benchmark_invoice300.py` and compare using `scripts/check_invoice300_acceptance.py` before proposing a merge (FR-002, SC-004).
 
