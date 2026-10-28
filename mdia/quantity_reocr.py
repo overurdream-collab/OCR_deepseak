@@ -1,4 +1,4 @@
-"""Independent, LOCAL recovery of a misread OCR quantity using original PDF pixels.
+"""Independent, LOCAL re-reading of misrecognized numeric OCR glyphs from PDF pixels.
 
 Never derive a charge from arithmetic. Arithmetic only corroborates a numeral
 already recognized by Tesseract in the original source crop. Fail closed if
@@ -11,8 +11,11 @@ import re
 
 from .textutil import fix_digits
 
-# A stringent opt-in class of errors: Paddle misrecognized a quantity glyph
-# as ASCII M, while 2+ other row fields are separately visible and parseable.
+# OCR glyphs demonstrated in source-token traces from real PaddleOCR runs.
+# These are triggers for a NEW independent read, not a mapping to numbers.
+# Deliberately exclude "-" and other punctuation, which may signify a
+# genuinely missing/not-applicable quantity in real medical invoices.
+ELIGIBLE_OCR_GLYPHS = frozenset(("M", "H", "w", "R", "I", "l", "O", "S", "B"))
 CONFLICT_CONFIDENCE = 0.80
 ACCEPT_CONFIDENCE = 0.70
 MIN_CORROBORATION = 0.65
@@ -104,7 +107,7 @@ def choose_digit(reads, price, total, orig_token="M"):
     Two separate preprocessing passes must independently recognize the same
     numeral in original pixels. Arithmetic is only a corroborating guard.
     """
-    if orig_token!="M":
+    if orig_token not in ELIGIBLE_OCR_GLYPHS:
         return None
     try:
         price=Decimal(str(price))
@@ -143,7 +146,7 @@ def choose_digit(reads, price, total, orig_token="M"):
 
 
 def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
-    """Resolve a Paddle M only when another OCR actually reads its glyph.
+    """Resolve a single-character nonnumeric Paddle glyph only if Tesseract reads it.
 
     The original Paddle evidence remains in the document. A new linked evidence
     entry contains the secondary OCR's word-level original-PDF coordinates.
@@ -153,7 +156,7 @@ def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
     evidence={e["id"]:e for e in doc.get("evidence",[]) if e.get("id")}
     for item in doc.get("invoice_items",[]):
         qty=item.get("quantity",{})
-        if qty.get("raw")!="M" or qty.get("status")!="unreadable":
+        if qty.get("raw") not in ELIGIBLE_OCR_GLYPHS or qty.get("status")!="unreadable":
             continue
         page_no=qty.get("page")
         source_page=by_page.get(page_no)
