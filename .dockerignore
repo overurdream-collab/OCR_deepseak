@@ -1,0 +1,16 @@
+.git/
+.github/
+.agents/
+.specify/
+specs/
+tests/
+docs/
+data/
+reports/
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+.env
+.env.*

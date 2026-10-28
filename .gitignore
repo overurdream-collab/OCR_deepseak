@@ -4,3 +4,9 @@ data/
 tests/samples/
 reports/
 .pytest_cache/
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+*.egg-info/
