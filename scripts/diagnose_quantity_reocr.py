@@ -44,6 +44,20 @@ def ocr_single_crop(image, box):
                           if str(t).strip()]
                 result.append({"preprocess":prep,"lang":lang,"psm":psm,
                                "tokens":tokens})
+    # The second pass is deliberately constrained to printed numerals.
+    # Do not infer a value from prices or totals at this stage.
+    for preprocess in ("raw", "gray4x"):
+        base = (ImageOps.autocontrast(crop.convert("L")).resize(
+            (crop.width*4,crop.height*4)) if preprocess=="gray4x" else crop)
+        for lang in ("eng", "ara+eng"):
+            for psm in (10,13):
+                data=pytesseract.image_to_data(
+                    base,lang=lang,
+                    config=f"--oem 1 --psm {psm} -c tessedit_char_whitelist=0123456789٠١٢٣٤٥٦٧٨٩",
+                    output_type=Output.DICT)
+                tokens=[(str(t).strip(),float(cf)) for t,cf in zip(data["text"],data["conf"]) if str(t).strip()]
+                result.append({"preprocess":preprocess,"lang":lang,"psm":psm,
+                               "whitelist":True,"tokens":tokens})
     return {"original_pdf_crop":rect, "trials":result}
 
 
