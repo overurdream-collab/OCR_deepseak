@@ -1,0 +1,23 @@
+name: MDIA isolated table model review gate
+on:
+  pull_request:
+    paths:
+      - 'scripts/table_model_review_gate.py'
+      - 'scripts/run_ppstructure_crop_trial.py'
+      - 'tests/test_table_model_review_gate.py'
+      - 'tests/test_ppstructure_crop_trial.py'
+      - '.github/workflows/mdia-table-crop-review-gate.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  review-only-guards:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Guard crop orientation, field source, Arabic digits, no financial mutation
+        run: python -m unittest tests.test_table_model_review_gate tests.test_ppstructure_crop_trial -v
