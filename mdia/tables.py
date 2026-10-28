@@ -269,25 +269,70 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
         return None
     from .textutil import parse_number
     rows = []
-    for ln in page.lines:
+    consumed = set()
+    # Exact normalized Arabic summary captions: never bill these as services.
+    # Avoid broad substring rules that might remove a genuine charge name.
+    summary_labels = {tuple(sorted(match_key(s).split())) for s in (
+        "المجموع قبل الخصم", "المجموع", "الخصم", "الضريبة",
+        "إجمالي الفاتورة", "الإجمالي", "صافي المبلغ", "صافي الإجمالي",
+        "المبلغ المستحق", "الرصيد المستحق", "المدفوع", "الإجمالي النهائي",
+    )}
+
+    def cells_for(ln):
+        """Only copy three observed, independently readable numeric tokens."""
         if line_pairs(ln) or header_columns(ln):
-            continue
+            return None
         numbers = sorted([w for w in ln.words if w.conf >= .65 and parse_number(w.text) is not None
                           and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)], key=lambda w: w.cx, reverse=True)
         if len(numbers) != 3:
-            continue
+            return None
         # Arabic data rows normally print the description to the right of qty, then unit price and total.
         qty, unit_price, line_total = numbers
         if not (qty.cx > unit_price.cx > line_total.cx):
-            continue
+            return None
         if parse_number(qty.text) <= 0 or parse_number(unit_price.text) < 0 or parse_number(line_total.text) < 0:
-            continue
+            return None
         desc = [w for w in ln.words if w.cx > qty.cx and w.conf >= .65 and has_ar(w.text)
                 and len(match_key(w.text)) >= 2]
-        if not desc:
+        if not desc or tuple(sorted(w.key for w in desc)) in summary_labels:
+            return None
+        return {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
+
+    def split_pair(a, b):
+        """Merge only neighboring, disjoint OCR fragments of ONE printed row.
+
+        OCR sometimes puts the Arabic service at a slightly different y from
+        its numeric cells. Never combine separate billable rows, overlapping
+        fragments, or two different service labels. Both original line IDs
+        remain attached to the result for source evidence and human review.
+        """
+        if abs(a.y - b.y) > .85 * min(a.height, b.height):
+            return None
+        a_left, a_right = min(w.x0 for w in a.words), max(w.x1 for w in a.words)
+        b_left, b_right = min(w.x0 for w in b.words), max(w.x1 for w in b.words)
+        if not (a_right <= b_left + .003 or b_right <= a_left + .003):
+            return None
+        arabic_a = any(has_ar(w.text) for w in a.words)
+        arabic_b = any(has_ar(w.text) for w in b.words)
+        if arabic_a == arabic_b:  # exactly one fragment contains the service name
+            return None
+        merged = Line(page.number, a.idx, sorted(a.words + b.words, key=lambda w: w.x0), rtl=True)
+        return cells_for(merged)
+
+    for i, ln in enumerate(page.lines):
+        if ln.idx in consumed:
             continue
-        cells = {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
-        rows.append(Row([ln.idx], cells, inherited=True))
+        cells = cells_for(ln)
+        line_idxs = [ln.idx]
+        if cells is None and i + 1 < len(page.lines):
+            nxt = page.lines[i + 1]
+            if nxt.idx not in consumed and cells_for(nxt) is None:
+                cells = split_pair(ln, nxt)
+                if cells:
+                    line_idxs.append(nxt.idx)
+                    consumed.add(nxt.idx)
+        if cells:
+            rows.append(Row(line_idxs, cells, inherited=True))
     if not rows:
         return None
     t = Table("invoice", page.number, None, [], rows=rows, rtl=True, inherited=True)

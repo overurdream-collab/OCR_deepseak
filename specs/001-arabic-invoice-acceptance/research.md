@@ -29,3 +29,30 @@
 - **Decision**: Publish distinct synthetic PASS/BLOCKED and real-document readiness status. Real patient data requires owner consent, de-identification, secure local test infrastructure, and human audit before production claims.
 - **Rationale**: 84.75% synthetic accuracy is not clinical accuracy; 100% on unknown scans cannot be guaranteed.
 - **Alternatives considered**: Infer deployment confidence from synthetic tests (unsafe).
+
+## Decision 6 — Distinguish Unicode script confusion from OCR misrecognition
+
+- **Evidence**: Real PaddleOCR on synthetic `ar_mixed_18` returned the service name `تحلیل سکر صائم` using Persian yeh (`U+06CC`) and keheh (`U+06A9`), instead of Arabic `ي` and `ك`. Without changing amounts, canonicalizing only the OCR *text value* increased that case's exact score from 15/27 to 19/27. The six-shard real Paddle evaluation **passed** at 5,113/5,776 (88.52%) vs 4,895/5,776 (84.75%) previously. The `ar_shaped` layout gained 97 correct fields and `ar_mixed` 121; no previously correct field was lost. Extra rows reported by the scorer decreased from 99 to 38 because more true service names matched; this does **not** prove 61 physical rows were deleted. GitHub Actions run `40753884964`.
+- **Decision (superseded in part by Decision 8)**: Keep `field.raw` and provenance unchanged; normalize verified Persian `ک → ك` and joining-form `ی → ي` OCR text variants only, never for financial values. Final/isolated Persian `ی` cannot safely be treated as Arabic `ي`. Any other extended Arabic-script letter (e.g. Urdu `پ چ ژ گ ں ہ ھ ۃ ے`) must be kept exactly as OCR saw it and flagged for human review, not silently transliterated.
+- **Diagnostic**: A local 21-PDF real-Paddle audit across `ar_shaped`, `ar_visual` and `ar_mixed` detected only 16 `U+06A9` and 8 `U+06CC` nonstandard Arabic-script letters; no further extended letters occurred in **those samples**. This limited negative result cannot exclude variants in unknown real-world invoices.
+- **Rationale**: Unicode Arabic, Persian and Urdu share script and similar glyph shapes, but distinct letters are not always semantically interchangeable. Medical names and amounts must retain auditable source text.
+- **Alternatives considered**: Replace every Persian/Urdu lookalike (may corrupt genuine names), or retrain the entire recognition model immediately (unnecessary before testing existing models and error patterns).
+
+## Decision 8 — Safeguard terminal Farsi yeh vs Arabic alef maqsura (user review, 2026-10-28)
+
+- **Official standard**: [Unicode 16.0, Arabic script, chapter 9](https://www.unicode.org/versions/Unicode16.0.0/core-spec/chapter-9/) specifies that U+06CC FARSI YEH has the same *initial/medial* forms as U+064A ARABIC YEH but the same *final/isolated* forms as U+0649 ARABIC ALEF MAKSURA. Arabic `ك` also has positional glyph shaping; it is still U+0643 in each position. Visual similarities are not a license to replace a character without sufficient context.
+- **Medical hazard**: The OCR sequence `کلی` might mean Arabic `كلى` (kidneys) or `كلي` (adjective/possessive). Automatically rewriting final `ی → ي` can make a valid clinical term wrong, even when amounts remain untouched.
+- **Decision**: For OCR *text* fields, keep final/isolated Farsi `ی` verbatim in `field.value`, even if `ک` elsewhere in that word is normalized. Add `ambiguous_final_farsi_yeh` to `review_reasons` and require `verification: needs_review`. Continue `ی → ي` only in verified joining initial/medial positions. Preserve `field.raw`, matched evidence, numerical values and native PDF text layers. Do not speculate whether the final glyph should be `ى` or `ي`.
+- **Verification**: Dedicated regression tests cover `كلى`, `كلي`, `کلی`, initial/medial Farsi yeh, diacritics, punctuation, and source preservation. Full synthetic 300-document acceptance must be rerun before merging; safety-driven behavior changes must be reported transparently even if a preexisting exact-match benchmark declines.
+
+## Decision 7 — Benchmark ready-made Arabic OCR / table models before retraining
+
+| Candidate | Verified capabilities | MDIA trial conditions |
+| --- | --- | --- |
+| [PaddleOCR-VL-1.6](https://www.paddleocr.ai/latest/en/version3.x/pipeline_usage/PaddleOCR-VL.html) | Full document pipeline recognizes text and tables, including Arabic-family languages; official docs describe x64 CPU installation. | **First new candidate**: run the *complete* layout + VLM pipeline on frozen 300 cases, measure CPU speed and source evidence. Do not compare its general OmniDocBench score directly to MDIA field accuracy. |
+| [EasyOCR](https://github.com/JaidedAI/EasyOCR) | Readily available multilingual recognition with an Arabic-script group supporting Arabic, Persian, Urdu and Uyghur. | **Second candidate**: run as an independent OCR backend on the same exact benchmark; preserve original boxes and confidence. |
+| [Tesseract tessdata_best Arabic](https://github.com/tesseract-ocr/tessdata_best) | Open-source Arabic LSTM traineddata. | Low-cost second opinion for uncertain text/numbers, but disagreement must only flag review, never replace a monetary value. |
+| [Surya](https://github.com/datalab-to/surya) | Layout, reading order and table recognition in 90+ languages; CPU via llama.cpp or GPU via vLLM. | Later trial; verify **model-weight commercial license terms** first, since Apache-2.0 code license alone does not cover commercial weight usage. |
+
+- **Decision**: Keep the proven PaddleOCR baseline as the default. Test challenger engines in isolation on the **same 300 PDFs**, scoring exact fields and matched names, per-case false rows, source geometry, manual-review protections, CPU memory/speed, and licensing. Only promote a candidate after a passed regression gate and independently validated provenance. Do not claim 100% from a vendor's unrelated benchmark.
+- **Rationale**: The initial 218-field gain came from a small text-normalization bug, not missing alphabet knowledge. Existing models trained across scripts and table layouts may address the remaining structural failures more cheaply than training from zero.
