@@ -163,7 +163,7 @@ def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
         if source_page is None or source_page.flags.get("ocr_engine")!="paddleocr-v5-arabic":
             continue
         original_evidence=evidence.get(qty.get("evidence_id"))
-        if not original_evidence or original_evidence.get("matched_text")!="M":
+        if not original_evidence or original_evidence.get("matched_text")!=qty.get("raw"):
             continue
         if original_evidence.get("geometry_source")!="line_interpolated":
             continue
