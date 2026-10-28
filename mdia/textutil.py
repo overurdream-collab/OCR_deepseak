@@ -16,6 +16,19 @@ def nfkc(s: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
+_ARABIC_OCR_SCRIPT_EQUIVALENTS = str.maketrans({"ک": "ك", "ی": "ي"})
+
+
+def normalize_arabic_ocr_script(s: str) -> str:
+    """Canonical Arabic output for OCR-confused Persian kaf/yeh codepoints.
+
+    The original OCR text must remain available as `field.raw` and evidence;
+    this only normalizes a separate text `value`, with mandatory human review.
+    Other Persian/Urdu characters that change meaning are never rewritten.
+    """
+    return s.translate(_ARABIC_OCR_SCRIPT_EQUIVALENTS)
+
+
 def fix_digits(s: str) -> str:
     return s.translate(_DIGITS)
 

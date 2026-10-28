@@ -12,7 +12,7 @@ from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
-                       parse_number)
+                       parse_number, normalize_arabic_ocr_script)
 
 ICD_RE = re.compile(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b")
 STRENGTH_RE = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ml|iu|units?|%|mmol|ملغ|ملجم|مجم|مل|ميكروغرام|وحده)(?!\s*/\s*dl)\b(?:\s*/\s*(\d+(?:[.,]\d+)?)?\s*(ml|mg|g|مل))?")
@@ -127,6 +127,14 @@ class Ctx:
             if iso is None:
                 status = "unreadable" if n in ("no_date_found", "invalid_date") else "ambiguous"
                 reasons.append(n)
+        elif kind == "text" and page.method == "ocr":
+            # Paddle Arabic recognition may use Persian ي/ك lookalikes. Preserve
+            # the recognized source exactly, but offer canonical Arabic as a
+            # separately reviewable value (never for money or quantities).
+            normalized = normalize_arabic_ocr_script(raw_text)
+            if normalized != raw_text:
+                value = normalized
+                reasons.append("arabic_ocr_script_variant")
         m = mult
         if page.flags.get("arabic_visual_order_fixed") and has_ar(raw_text):
             m *= 0.92
@@ -137,7 +145,8 @@ class Ctx:
         conf = next(e["confidence"] for e in self.evidence if e["id"] == eid)
         if status != "extracted":
             conf = round(conf * 0.5, 3)
-        verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted") else "unverified"
+        verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted"
+                                          or "arabic_ocr_script_variant" in reasons) else "unverified"
         f = {"raw": raw_text, "value": value, "evidence_id": eid, "page": page.number, "confidence": conf,
              "status": status, "verification": verification}
         if reasons:
