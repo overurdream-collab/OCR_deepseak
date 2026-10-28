@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 
 from . import config
 from .kv import KV, line_pairs, page_pairs
+from .invoice_identifier import observed_invoice_id
 from .total_candidates import is_isolated_total
 from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
@@ -376,6 +377,24 @@ class Extractor:
             "service_date": self._single({"invoice.service_date"}, kind="date"),
             "currency": self._currency(),
         }
+        if fields["invoice_number"]["status"] == "not_found":
+            hit = observed_invoice_id([self.pages[n] for n in self.order])
+            if hit is not None:
+                page, line, word, identifier = hit
+                field = self.ctx.field(
+                    page, [word], raw=identifier, source=line.text,
+                    note="invoice_identifier_from_printed_header"
+                )
+                # OCR line-token geometry does not precisely isolate the
+                # substring 'INV-...' when Paddle joins it with 'No:'.
+                # Preserve the full original token and require provenance
+                # review in that scenario; no digits are guessed.
+                if word.text != identifier:
+                    field["verification"] = "needs_review"
+                    field.setdefault("review_reasons", []).append(
+                        "invoice_identifier_embedded_in_ocr_token"
+                    )
+                fields["invoice_number"] = field
         totals = {}
         for key, fid in [("subtotal", "fin.subtotal"), ("discount_total", "fin.discount"), ("tax_total", "fin.tax"),
                          ("additional_fees", "fin.fees"), ("invoice_total", "fin.total"), ("paid_total", "fin.paid"),
