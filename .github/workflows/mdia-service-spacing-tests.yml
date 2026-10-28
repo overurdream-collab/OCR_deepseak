@@ -1,0 +1,21 @@
+name: MDIA service OCR spacing - safety unit tests
+on:
+  pull_request:
+    paths:
+      - 'mdia/service_spacing.py'
+      - 'tests/test_service_spacing.py'
+      - '.github/workflows/mdia-service-spacing-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  whitespace-is-not-medical-inference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Assert zero letter changes, zero patient changes and unchanged provenance
+        run: python -m unittest tests.test_service_spacing -v
