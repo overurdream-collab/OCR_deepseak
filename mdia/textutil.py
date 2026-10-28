@@ -17,6 +17,8 @@ def nfkc(s: str) -> str:
 
 
 _ARABIC_OCR_SCRIPT_EQUIVALENTS = str.maketrans({"ک": "ك", "ی": "ي"})
+_BASIC_ARABIC_LETTERS = frozenset("ءآأؤإئابتثجحخدذرزسشصضطظعغفقكلمنهويىة")
+_REVIEWED_EQUIVALENTS = frozenset("کی")
 
 
 def normalize_arabic_ocr_script(s: str) -> str:
@@ -27,6 +29,18 @@ def normalize_arabic_ocr_script(s: str) -> str:
     Other Persian/Urdu characters that change meaning are never rewritten.
     """
     return s.translate(_ARABIC_OCR_SCRIPT_EQUIVALENTS)
+
+
+def uncertain_arabic_ocr_letters(s: str) -> list:
+    """Flag extended Arabic-script OCR letters; do not transliterate them.
+
+    Urdu/Persian letters such as peh, gaf, heh goal and yeh barree may be
+    legitimate names or different sounds. Never replace them with Arabic
+    lookalikes as if they were proved equivalent to a source glyph.
+    """
+    return sorted({ch for ch in s if ch not in _BASIC_ARABIC_LETTERS
+                   and ch not in _REVIEWED_EQUIVALENTS
+                   and unicodedata.name(ch, "").startswith("ARABIC LETTER ")})
 
 
 def fix_digits(s: str) -> str:

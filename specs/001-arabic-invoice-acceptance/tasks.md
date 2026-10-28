@@ -53,7 +53,8 @@
 ### Implementation for User Story 2
 
 - [x] T009a [US2] Recover disjoint, adjacent OCR fragments in `unheaded_arabic_invoice_rows` using observed tokens only; preserve both source line IDs and mandatory review. Full 300-case real Paddle verification passed with **no regression and no accuracy delta** (GitHub run `40751589356`).
-- [x] T009b [US2] Normalize only Paddle OCR text-value Persian `ک/ی` lookalikes to Arabic `ك/ي`, while keeping `raw` and evidence unchanged and mandating review; reproduce `ar_mixed_18` improvement from 15/27 to 19/27 fields on real local Paddle inference. Full 300-case effect is still **unmeasured**.
+- [x] T009b [US2] Normalize only Paddle OCR text-value Persian `ک/ی` lookalikes to Arabic `ك/ي`, while keeping `raw` and evidence unchanged and mandating review; reproduce `ar_mixed_18` improvement from 15/27 to 19/27 fields on real local Paddle inference. Full 300-case gate passed with 218 additional correct fields (GitHub run `40753884964`).
+- [x] T009c [US2] Audit 21 synthetic PDFs through real PaddleOCR for other Persian/Urdu extended script characters; implement review-only detection (no replacement) for non-equivalent extended letters with focused negative tests. Record official-model alternatives and licensing in `research.md`.
 - [ ] T009 [US2] Refine `mdia/tables.py` only after the focused tests fail on an actual defect; keep suspect rows for review and do not invent monetary values (FR-005, FR-006).
 - [ ] T010 [US2] Run the six-shard real PaddleOCR benchmark with `scripts/benchmark_invoice300.py` and compare using `scripts/check_invoice300_acceptance.py` before proposing a merge (FR-002, SC-004).
 

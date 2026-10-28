@@ -12,7 +12,7 @@ from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
-                       parse_number, normalize_arabic_ocr_script)
+                       parse_number, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters)
 
 ICD_RE = re.compile(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b")
 STRENGTH_RE = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ml|iu|units?|%|mmol|ملغ|ملجم|مجم|مل|ميكروغرام|وحده)(?!\s*/\s*dl)\b(?:\s*/\s*(\d+(?:[.,]\d+)?)?\s*(ml|mg|g|مل))?")
@@ -135,6 +135,10 @@ class Ctx:
             if normalized != raw_text:
                 value = normalized
                 reasons.append("arabic_ocr_script_variant")
+            if uncertain_arabic_ocr_letters(raw_text):
+                # An Urdu/Persian letter is NOT proof of its visually similar
+                # Arabic counterpart. Keep it verbatim and require a reviewer.
+                reasons.append("ocr_extended_arabic_letter")
         m = mult
         if page.flags.get("arabic_visual_order_fixed") and has_ar(raw_text):
             m *= 0.92
@@ -146,7 +150,8 @@ class Ctx:
         if status != "extracted":
             conf = round(conf * 0.5, 3)
         verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted"
-                                          or "arabic_ocr_script_variant" in reasons) else "unverified"
+                                          or "arabic_ocr_script_variant" in reasons
+                                          or "ocr_extended_arabic_letter" in reasons) else "unverified"
         f = {"raw": raw_text, "value": value, "evidence_id": eid, "page": page.number, "confidence": conf,
              "status": status, "verification": verification}
         if reasons:

@@ -3,7 +3,7 @@ import unittest
 
 from mdia.extract import Ctx
 from mdia.model import Page, Word
-from mdia.textutil import normalize_arabic_ocr_script
+from mdia.textutil import normalize_arabic_ocr_script, uncertain_arabic_ocr_letters
 from scripts.compare_structured_arabic import row_by_name
 
 
@@ -24,6 +24,19 @@ class ArabicOCRScriptVariantTests(unittest.TestCase):
     def test_does_not_change_real_distinct_arabic_letters_or_digits(self):
         raw = "أجرة غرفة ١٢٥٫٥٠ غ پ گ ة ى"
         self.assertEqual(normalize_arabic_ocr_script(raw), raw)
+
+    def test_recognizes_other_urdu_persian_letters_without_equating_them(self):
+        self.assertEqual(set(uncertain_arabic_ocr_letters("پ چ ژ گ ں ہ ھ ۃ ے")),
+                         set("پچژگںہھۃے"))
+        self.assertEqual(uncertain_arabic_ocr_letters("ك ي ک ی ء أ إ آ ة ى"), [])
+
+    def test_urdu_character_is_reviewed_but_never_replaced(self):
+        f, ev = field("گرفتن")
+        self.assertEqual(f["value"], "گرفتن")
+        self.assertEqual(f["raw"], "گرفتن")
+        self.assertEqual(ev[0]["matched_text"], "گرفتن")
+        self.assertEqual(f["verification"], "needs_review")
+        self.assertIn("ocr_extended_arabic_letter", f["review_reasons"])
 
     def test_ocr_value_is_normalized_but_raw_and_evidence_are_untouched(self):
         f, ev = field("تحلیل سکر صائم")
