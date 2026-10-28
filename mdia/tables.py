@@ -368,7 +368,7 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
                     continue
                 numbers = sorted(
                     [w for w in ln.words if w.conf >= .65
-                     and re.fullmatch(r"[\\d.,٠-٩٫٬]+", w.text)
+                     and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)
                      and parse_number(w.text) is not None],
                     key=lambda w: w.cx, reverse=True
                 )
