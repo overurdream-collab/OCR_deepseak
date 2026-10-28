@@ -1,0 +1,89 @@
+name: MDIA Arabic missing-row recovery - 300 real PaddleOCR
+on:
+  pull_request:
+    paths:
+      - 'mdia/tables.py'
+      - 'tests/test_arabic_missing_rows.py'
+      - '.github/workflows/mdia-arabic-row-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  real-ocr-300:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real local OCR and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Full regressions, no guessed quantity, and Arabic PDF readiness
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+      - name: Run actual PaddleOCR on exactly 50 of 300 frozen synthetic invoices
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic \
+            --output-dir results/arabic_row_shard${{ matrix.shard }}
+      - name: Verify real completed PaddleOCR, no missing PDFs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(next(Path("results").glob("arabic_row_shard*/results.json")).read_text("utf-8"))
+          assert r["status"]=="completed_real_ocr" and len(r["results"])==50
+          assert r["summary"]["paddle_arabic"]["failures"]==0
+          assert all(x["real_paddle_detected"] for x in r["results"])
+          print(r["shard"],r["summary"]["paddle_arabic"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-rows-shard${{ matrix.shard }}
+          path: results/arabic_row_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  baseline-acceptance:
+    needs: real-ocr-300
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-rows-shard*
+          path: acceptance-shards
+      - name: Original frozen regression gate
+        run: |
+          python -m scripts.check_invoice300_acceptance acceptance-shards/*/results.json
+      - name: Strict current 91.24% floor (independent per-field comparison still mandatory)
+        run: |
+          python - <<'PY'
+          import glob, json
+          files=glob.glob("acceptance-shards/*/results.json")
+          assert len(files)==6
+          reports=[json.load(open(p)) for p in files]
+          assert len({r["shard"] for r in reports})==6
+          results=[rec for r in reports for rec in r["results"]]
+          assert len(results)==300 and len({rec["case"] for rec in results})==300
+          correct=sum(rec["matched"] for rec in results)
+          extra=sum(rec["extra_item_rows"] for rec in results)
+          print("SCORE",correct,"/5776; EXTRA",extra)
+          assert sum(rec["total"] for rec in results)==5776
+          assert correct >= 5270 and extra <= 38, "failed previous 91.24% summary floor"
+          PY

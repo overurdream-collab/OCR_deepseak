@@ -294,7 +294,7 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
             return None
         desc = [w for w in ln.words if w.cx > qty.cx and w.conf >= .65 and has_ar(w.text)
                 and len(match_key(w.text)) >= 2]
-        if not desc or tuple(sorted(w.key for w in desc)) in summary_labels:
+        if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
             return None
         return {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
 
@@ -333,6 +333,65 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
                     consumed.add(nxt.idx)
         if cells:
             rows.append(Row(line_idxs, cells, inherited=True))
+    # Second pass: sometimes OCR recognizes the printed quantity (e.g. 3)
+    # as a letter "M". Recover ONLY the independently observed description,
+    # unit price, and line total. Keep that OCR glyph as an UNREADABLE qty;
+    # never infer its number from arithmetic, a lexicon, or sibling rows.
+    # At least TWO fully parsed rows must establish independent column anchors.
+    if len(rows) >= 2:
+        anchors = {}
+        for key in ("qty", "unit_price", "total"):
+            xs = [r.cells[key][0].cx for r in rows if len(r.cells.get(key, [])) == 1]
+            xs.sort()
+            if len(xs) < 2 or xs[-1] - xs[0] > .045:
+                break
+            anchors[key] = xs[len(xs) // 2]
+        if (len(anchors) == 3 and
+                anchors["qty"] > anchors["unit_price"] > anchors["total"]):
+            line_at = {ln.idx: ln for ln in page.lines}
+            anchor_y = sorted(
+                line_at[r.line_idxs[0]].y for r in rows
+                if r.line_idxs[0] in line_at
+            )
+            for ln in page.lines:
+                if ln.idx in consumed or any(ln.idx in r.line_idxs for r in rows):
+                    continue
+                if not (anchor_y[0] - .075 <= ln.y <= anchor_y[-1] + .075):
+                    continue
+                if line_pairs(ln) or header_columns(ln):
+                    continue
+                # A letter-shaped OCR glyph is *not* a numeric assertion.
+                # This pilot only covers the reproduced literal M failure.
+                unreadable = [w for w in ln.words if w.text == "M"
+                              and w.conf >= .65 and abs(w.cx - anchors["qty"]) <= .025]
+                if len(unreadable) != 1:
+                    continue
+                numbers = sorted(
+                    [w for w in ln.words if w.conf >= .65
+                     and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)
+                     and parse_number(w.text) is not None],
+                    key=lambda w: w.cx, reverse=True
+                )
+                if len(numbers) != 2:
+                    continue
+                unit_price, line_total = numbers
+                if (abs(unit_price.cx - anchors["unit_price"]) > .025 or
+                        abs(line_total.cx - anchors["total"]) > .025 or
+                        not unreadable[0].cx > unit_price.cx > line_total.cx or
+                        parse_number(unit_price.text) < 0 or
+                        parse_number(line_total.text) < 0):
+                    continue
+                desc = [w for w in ln.words if w.cx > unreadable[0].cx
+                        and w.conf >= .65 and has_ar(w.text)
+                        and len(match_key(w.text)) >= 2]
+                if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
+                    continue
+                rows.append(Row([ln.idx], {
+                    "name": desc, "qty": unreadable, "unit_price": [unit_price],
+                    "total": [line_total],
+                }, inherited=True))
+                consumed.add(ln.idx)
+            rows.sort(key=lambda r: min(r.line_idxs))
     if not rows:
         return None
     t = Table("invoice", page.number, None, [], rows=rows, rtl=True, inherited=True)
