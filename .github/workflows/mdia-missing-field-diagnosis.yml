@@ -1,0 +1,38 @@
+name: MDIA source-level diagnosis of missing OCR fields
+on:
+  pull_request:
+    paths:
+      - 'scripts/diagnose_missing_ocr_fields.py'
+      - '.github/workflows/mdia-missing-field-diagnosis.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  trace-real-paddle-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install CPU PaddleOCR and Arabic PDF fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Trace OCR tokens and real extracted rows for eight failure cases
+        run: |
+          python -u -m scripts.diagnose_missing_ocr_fields --out results/missing_fields.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-missing-fields-synthetic-evidence
+          path: results/missing_fields.json
+          retention-days: 7
+          if-no-files-found: error
