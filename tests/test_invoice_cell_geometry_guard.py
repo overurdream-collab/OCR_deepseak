@@ -20,5 +20,18 @@ class CellGuardTests(unittest.TestCase):
     def test_missing_amount_not_fabricated(self):
         self.assertTrue(_invoice_cell_geometry_safe({"qty":[w("2",.4)]},[]))
 
+    def test_printed_currency_is_not_a_second_amount(self):
+        self.assertTrue(_invoice_cell_geometry_safe({
+            "unit_price": [w("SAR", .2), w("300.00", .25)],
+            "total": [w("300.00", .1), w("ريال", .15)]}, []))
+
+    def test_currency_does_not_hide_two_amounts(self):
+        self.assertFalse(_invoice_cell_geometry_safe({
+            "total": [w("SAR", .1), w("1", .15), w("00", .2)]}, []))
+
+    def test_unknown_text_is_not_a_currency_label(self):
+        self.assertFalse(_invoice_cell_geometry_safe({
+            "total": [w("unknown", .1), w("300.00", .15)]}, []))
+
 if __name__=="__main__":
     unittest.main()
