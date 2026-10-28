@@ -57,6 +57,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 seg_pages = [p for p in pages if p.number in seg.pages]
                 seg_classes = [c for p, c in zip(pages, classes) if p.number in seg.pages]
                 d = extract_document(job_id, doc_id, seg, seg_pages, seg_classes)
+                # Re-read OCR's literal M-shaped quantity from original local
+                # PDF pixels with an independent model. Arithmetic corroborates
+                # only a digit that Tesseract itself visibly recognized.
+                from .quantity_reocr import recover_quantities
+                recover_quantities(d, pdf, seg_pages)
                 if seg.confidence < 0.35 or seg.type == "unknown":
                     d["warnings"].append({"id": f"{doc_id}-wc", "kind": "low_classification_confidence", "severity": "warning",
                                           "message": f"نوع المستند غير مؤكد ({seg.type}, {seg.confidence}) / document type uncertain"})

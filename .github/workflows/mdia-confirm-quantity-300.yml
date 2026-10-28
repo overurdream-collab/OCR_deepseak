@@ -1,0 +1,93 @@
+name: MDIA independent quantity correction - 300 real OCR regression
+on:
+  pull_request:
+    paths:
+      - 'mdia/quantity_reocr.py'
+      - 'mdia/pipeline.py'
+      - 'tests/test_quantity_reocr.py'
+      - 'scripts/compare_verified_quantity300.py'
+      - '.github/workflows/mdia-confirm-quantity-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  real-ocr-300:
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install offline OCR models (no paid APIs)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Full unit regressions and Arabic PDF readiness
+        run: |
+          python -m unittest discover -s tests -p 'test_*.py' -q
+          python -m mdia.doctor
+      - name: Read 50 frozen invoices using real primary and secondary OCR
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/quantity_shard${{ matrix.shard }}
+      - name: No partial or failed OCR jobs
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(next(Path("results").glob("quantity_shard*/results.json")).read_text("utf-8"))
+          assert r["status"]=="completed_real_ocr" and len(r["results"])==50
+          assert r["summary"]["paddle_arabic"]["failures"]==0
+          assert all(x["real_paddle_detected"] for x in r["results"])
+          print(r["shard"],r["summary"]["paddle_arabic"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-quantity-shard${{ matrix.shard }}
+          path: results/quantity_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  strict-comparison:
+    needs: real-ocr-300
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-quantity-shard*
+          path: new-shards
+      - name: Require frozen synthetic acceptance
+        run: python -m scripts.check_invoice300_acceptance new-shards/*/results.json
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40776907768
+          github-token: ${{ github.token }}
+          pattern: mdia-rows-shard*
+          path: baseline-shards
+      - name: Fail if ANY previously correct field is lost against 91.50% PR20 baseline
+        run: |
+          python -m scripts.compare_verified_quantity300 \
+            --previous baseline-shards/*/results.json \
+            --current new-shards/*/results.json \
+            --output results/quantity_comparison.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-quantity-nonregression-proof
+          path: results/quantity_comparison.json
+          retention-days: 14
+          if-no-files-found: warn
