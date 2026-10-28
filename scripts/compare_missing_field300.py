@@ -50,8 +50,8 @@ def compare(before_files, after_files):
     base = sum(x["matched"] for x in before.values())
     candidate = sum(x["matched"] for x in after.values())
     total = sum(x["total"] for x in after.values())
-    if base != 5382 or total != 5776:
-        raise ValueError("must compare to frozen PR22 5382/5776 baseline")
+    if base != 5384 or total != 5776:
+        raise ValueError("must compare to frozen PR23 previous 5384/5776 baseline")
     return {"status": "PASS" if not losses and not new_rows and candidate >= base else "BLOCKED",
             "baseline": base, "candidate": candidate, "total": total,
             "gained": gains, "lost": losses, "new_extra_rows": new_rows,
