@@ -294,7 +294,7 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
             return None
         desc = [w for w in ln.words if w.cx > qty.cx and w.conf >= .65 and has_ar(w.text)
                 and len(match_key(w.text)) >= 2]
-        if not desc or tuple(sorted(w.key for w in desc)) in summary_labels:
+        if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
             return None
         return {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
 
@@ -384,7 +384,7 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
                 desc = [w for w in ln.words if w.cx > unreadable[0].cx
                         and w.conf >= .65 and has_ar(w.text)
                         and len(match_key(w.text)) >= 2]
-                if not desc or tuple(sorted(w.key for w in desc)) in summary_labels:
+                if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
                     continue
                 rows.append(Row([ln.idx], {
                     "name": desc, "qty": unreadable, "unit_price": [unit_price],
