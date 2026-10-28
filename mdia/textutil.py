@@ -132,10 +132,24 @@ def detect_currency(s: str):
     return raw, _CUR.get(k)
 
 
+def ocr_arabic_comma_decimal(s):
+    """Tentative numeric OCR interpretation of an explicit Arabic comma glyph.
+
+    U+060C is punctuation, not a decimal sign. Some OCR outputs confuse it
+    with U+066B. Only a complete positive numeric token with exactly two
+    post-comma digits qualifies, and ONLY for mandatory human review.
+    Never infer a separator from plain digits or a prose/grouped amount.
+    """
+    t = fix_digits(nfkc(str(s or ""))).strip()
+    m = re.fullmatch(r"(\d{1,7})،(\d{2})", t)
+    return Decimal(m.group(1) + "." + m.group(2)) if m else None
+
+
 def is_numeric_token(t: str) -> bool:
+    if ocr_arabic_comma_decimal(t) is not None:
+        return True
     t = fix_digits(nfkc(t)).strip(_STRIP + " ")
     return bool(re.fullmatch(r"[-+]?\d[\d,.\u066B\u066C]*%?", t)) or t == "-"
-
 
 def parse_number(s):
     """Decimal or None. Ambiguity stays explicit: unparseable -> None."""
@@ -162,13 +176,23 @@ def parse_number(s):
     return -d if neg else d
 
 
-def last_amount(s: str):
-    """(raw_token, Decimal) of the last numeric token that is not a percentage, else (None, None)."""
+def last_amount(s: str, allow_ocr_arabic_comma=False):
+    """Last observed numeric token; ambiguous punctuation is not discarded.
+
+    OCR-only U+060C handling MUST be accompanied by a human-review flag.
+    The source token is returned verbatim, never rewritten.
+    """
     toks = fix_digits(nfkc(s)).split()
     for tok in reversed(toks):
         if "%" in tok or not re.search(r"\d", tok):
             continue
-        clean = tok.strip("[]:؛;")                      # keep parentheses: "(20.00)" is a NEGATIVE amount
+        clean = tok.strip("[]:؛;")  # parentheses remain for negative amounts
+        if "،" in clean:
+            if allow_ocr_arabic_comma:
+                v = ocr_arabic_comma_decimal(clean)
+                if v is not None:
+                    return tok, v
+            continue
         if re.fullmatch(r"[-+]?\(?\d[\d,.\u066B\u066C]*\)?", clean):
             v = parse_number(clean)
             if v is not None:
