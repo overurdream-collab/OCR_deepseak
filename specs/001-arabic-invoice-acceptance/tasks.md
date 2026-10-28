@@ -58,6 +58,7 @@
 - [x] T009d [US2] Guard against conflating `ي` and `ى`: preserve ambiguous final/isolated Farsi `ی`, flag human review, and test clinically meaningful `كلى`/`كلي` distinction. Unicode source and decision documented in `research.md`.
 - [ ] T009 [US2] Refine `mdia/tables.py` only after the focused tests fail on an actual defect; keep suspect rows for review and do not invent monetary values (FR-005, FR-006).
 - [ ] T010 [US2] Run the six-shard real PaddleOCR benchmark with `scripts/benchmark_invoice300.py` and compare using `scripts/check_invoice300_acceptance.py` before proposing a merge (FR-002, SC-004).
+- [x] T010a [US2] Test official Tesseract `tessdata_best` Arabic/English on all 300 synthetic PDFs alongside the unchanged PaddleOCR model; publish exact per-layout and per-field gains/losses with source hashes, explicit non-promotion decision and independent comparison tests. See `docs/MDIA_OCR_ENGINE_COMPARISON_2026-10-28.md`.
 
 **Checkpoint**: No legitimate service regression and no worsened per-layout scores; otherwise BLOCKED.
 
