@@ -1,8 +1,11 @@
-name: MDIA recover OCR quantities - 300 frozen invoices
+name: MDIA recover quantities and invoice IDs - 300 frozen invoices
 on:
   pull_request:
     paths:
       - 'mdia/quantity_reocr.py'
+      - 'mdia/invoice_identifier.py'
+      - 'mdia/extract.py'
+      - 'tests/test_invoice_identifier.py'
       - 'tests/test_quantity_reocr.py'
       - 'scripts/compare_missing_field300.py'
       - '.github/workflows/mdia-missing-quantity-300.yml'
@@ -74,11 +77,11 @@ jobs:
         run: python -m scripts.check_invoice300_acceptance candidate/*/results.json
       - uses: actions/download-artifact@v4
         with:
-          run-id: 40782283610
+          run-id: 40784369818
           github-token: ${{ github.token }}
-          pattern: mdia-pre-review-shard*
+          pattern: mdia-missing-shard*
           path: baseline
-      - name: Strict per-field proof against 5382/5776 accepted baseline
+      - name: Strict per-field proof against 5384/5776 first-stage accepted baseline
         run: |
           python -m scripts.compare_missing_field300 \
             --previous baseline/*/results.json \
