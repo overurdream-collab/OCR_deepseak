@@ -1,6 +1,7 @@
 """Orchestrates: integrity check -> read/OCR -> classify -> segment -> extract -> validate -> link."""
 import time
 import traceback
+import os
 
 from . import config
 from .classify import classify_page, segment
@@ -34,7 +35,10 @@ def _link_documents(docs):
     return links
 
 
-def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
+def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None, zero_human=None):
+    # Explicit runtime opt-in, preserving legacy workflows until validated.
+    if zero_human is None:
+        zero_human = os.environ.get("MDIA_ZERO_HUMAN_MODE", "0") == "1"
     st = store.status(job_id)
     store.set_status(job_id, state="processing", progress=0.02, stage="reading", error=None, ocr_mode=ocr_mode)
     t0 = time.time()
@@ -89,19 +93,42 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                      "laboratory_tests": [], "imaging": [], "procedures": [], "hospitalization": {}, "evidence": [],
                      "warnings": [{"id": f"{doc_id}-wf", "kind": "extraction_failed", "severity": "error", "message": f"{type(e).__name__}: {e}"}],
                      "requires_human_review": []}
-            # Keep all safety review requirements intact; expose a separate
-            # prioritized worklist so source-geometry warnings do not masquerade
-            # as transcription/financial errors.
-            from .review_triage import triage_document
-            d["review_triage"] = triage_document(d)
+            # In machine-only mode, never route exceptions to humans. Instead
+            # preserve every unresolved check in a machine ledger and block
+            # the extracted document from being treated as reliable output.
+            if zero_human:
+                from .zero_human import apply_zero_human_policy
+                apply_zero_human_policy(d)
+            else:
+                from .review_triage import triage_document
+                d["review_triage"] = triage_document(d)
             docs.append(d)
         failed_pages = [p.number for p in pages if any(w["kind"] == "page_failed" for w in p.warnings)]
+        # Linking across documents may reveal inconsistent identities. Never
+        # silently clear these when human handoff is disabled.
+        links = _link_documents(docs)
+        if zero_human:
+            for link in links:
+                if link.get("needs_review"):
+                    link["original_review_reason"] = "cross_document_identity_conflict"
+                    link["needs_review"] = False
+                    link["machine_unresolved"] = True
+                    for doc in docs:
+                        if doc.get("document_id") in (link.get("from"), link.get("to")):
+                            from .zero_human import record_machine_issue
+                            record_machine_issue(doc, "cross_document_identity",
+                                                 "cross_document_identity_conflict")
         result = {
             "schema_version": config.SCHEMA_VERSION, "job_id": job_id,
             "source": {"filename": st["filename"], "sha256": st["sha256"], "pages": len(pages)},
-            "processing_status": "completed_with_errors" if failed_pages or any(d["processing_status"] == "failed" for d in docs) else
-                                 ("completed_with_review" if any(d["requires_human_review"] for d in docs) else "completed"),
-            "documents": docs, "document_links": _link_documents(docs),
+            "processing_status": (
+                "completed_with_errors" if failed_pages or any(d["processing_status"] == "failed" for d in docs) else
+                "blocked_unresolved" if zero_human and any(not d["extraction_ready"] for d in docs) else
+                "completed" if zero_human else
+                "completed_with_review" if any(d["requires_human_review"] for d in docs) else "completed"
+            ),
+            "automation_policy": "zero_human_fail_closed" if zero_human else "legacy_review",
+            "documents": docs, "document_links": links,
             "page_info": [{"page": p.number, "method": p.method, "image": p.image, "width": p.width, "height": p.height,
                            "ocr_mean_conf": p.flags.get("ocr_mean_conf"),
                            "cross_engine_word_matches": p.flags.get("cross_engine_word_matches", 0),
@@ -109,6 +136,8 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                            "warnings": p.warnings} for p in pages],
             "summary": {"documents": len(docs), "pages": len(pages),
                         "fields_needing_review": sum(len(d["requires_human_review"]) for d in docs),
+                        "machine_unresolved_checks": sum(len(d.get("machine_unresolved_checks", [])) for d in docs),
+                        "human_handoffs": 0 if zero_human else sum(len(d["requires_human_review"]) for d in docs),
                         "warnings": sum(len(d["warnings"]) for d in docs), "seconds": round(time.time() - t0, 2)},
         }
         store.save_result(job_id, result)
