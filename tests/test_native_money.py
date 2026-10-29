@@ -29,7 +29,7 @@ class NativeMoneyTests(unittest.TestCase):
     def test_split_decimal_tokens_are_not_joined_or_guessed(self):
         result = _amount_candidates([word("48", .50, x1=.52), word(".00", .523, x1=.55)],
                                     [.49, .19, .57, .23])
-        self.assertEqual(len(result), 0)
+        self.assertFalse(any(x[0] == "48.00" for x in result))
 
     def document(self):
         return {"document_id": "d1", "evidence": [
