@@ -104,6 +104,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None, zero_huma
                 d["review_triage"] = triage_document(d)
             docs.append(d)
         failed_pages = [p.number for p in pages if any(w["kind"] == "page_failed" for w in p.warnings)]
+        if zero_human and failed_pages:
+            from .zero_human import record_machine_issue
+            for doc in docs:
+                if set(doc.get("pages") or []) & set(failed_pages):
+                    record_machine_issue(doc, "page_integrity", "page_ocr_failed")
         # Linking across documents may reveal inconsistent identities. Never
         # silently clear these when human handoff is disabled.
         links = _link_documents(docs)
@@ -122,8 +127,10 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None, zero_huma
             "schema_version": config.SCHEMA_VERSION, "job_id": job_id,
             "source": {"filename": st["filename"], "sha256": st["sha256"], "pages": len(pages)},
             "processing_status": (
+                "blocked_unresolved" if zero_human and (
+                    failed_pages or any(not d.get("extraction_ready", False) for d in docs)
+                ) else
                 "completed_with_errors" if failed_pages or any(d["processing_status"] == "failed" for d in docs) else
-                "blocked_unresolved" if zero_human and any(not d["extraction_ready"] for d in docs) else
                 "completed" if zero_human else
                 "completed_with_review" if any(d["requires_human_review"] for d in docs) else "completed"
             ),
