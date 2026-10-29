@@ -26,7 +26,8 @@
       "enum": [
         "completed",
         "completed_with_review",
-        "completed_with_errors"
+        "completed_with_errors",
+        "blocked_unresolved"
       ]
     },
     "documents": {
@@ -46,6 +47,9 @@
     },
     "summary": {
       "type": "object"
+    },
+    "automation_policy": {
+      "type": "string"
     }
   },
   "$defs": {
@@ -106,7 +110,8 @@
             "auto_verified",
             "needs_review",
             "corrected",
-            "not_applicable"
+            "not_applicable",
+            "machine_unresolved"
           ]
         },
         "review_reasons": {
@@ -121,7 +126,10 @@
             "type": "object"
           }
         },
-        "corrected_value": {}
+        "corrected_value": {},
+        "original_verification": {
+          "type": "string"
+        }
       }
     },
     "Evidence": {
@@ -297,7 +305,8 @@
           "enum": [
             "completed",
             "completed_with_review",
-            "failed"
+            "failed",
+            "blocked_unresolved"
           ]
         },
         "pages": {
@@ -422,6 +431,29 @@
           "items": {
             "$ref": "#/$defs/procedures_record"
           }
+        },
+        "automation_policy": {
+          "type": "string"
+        },
+        "machine_unresolved_checks": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "unresolved_machine_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "human_handoff_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "extraction_ready": {
+          "type": "boolean"
+        },
+        "financial_approval": {
+          "type": "boolean"
         }
       }
     },
