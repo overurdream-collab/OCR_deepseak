@@ -11,7 +11,7 @@ from .quantity_reocr import _digits
 from .textutil import match_key
 
 
-_HEADER_WORDS = frozenset(("qty", "quantity", "الكمية"))
+_HEADER_WORDS = frozenset(match_key(x) for x in ("qty", "quantity", "الكمية"))
 
 
 def _center(box):
