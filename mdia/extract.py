@@ -395,6 +395,11 @@ class Extractor:
                         "invoice_identifier_embedded_in_ocr_token"
                     )
                 fields["invoice_number"] = field
+        if fields["invoice_number"]["status"] == "extracted":
+            from .invoice_id_cleanup import repair_invoice_id
+            fields["invoice_number"] = repair_invoice_id(
+                fields["invoice_number"], [self.pages[n] for n in self.order], self.ctx
+            )
         totals = {}
         for key, fid in [("subtotal", "fin.subtotal"), ("discount_total", "fin.discount"), ("tax_total", "fin.tax"),
                          ("additional_fees", "fin.fees"), ("invoice_total", "fin.total"), ("paid_total", "fin.paid"),
