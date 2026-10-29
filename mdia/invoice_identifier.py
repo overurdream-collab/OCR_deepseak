@@ -38,7 +38,7 @@ def observed_invoice_id(pages):
 
 
 _PRINTED_WITH_TRAILING_OCR_NOISE = re.compile(
-    r"^(INV[-‐‑–—][0-9٠-٩۰-۹]{4,12})\\s+([0-9٠-٩۰-۹]{1,2})$", re.I
+    r"^(INV[-‐‑–—][0-9٠-٩۰-۹]{4,12})\s+([0-9٠-٩۰-۹]{1,2})$", re.I
 )
 
 
