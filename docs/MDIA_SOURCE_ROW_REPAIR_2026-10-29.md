@@ -58,3 +58,24 @@ The paired full-dataset CI has now completed on the current PR head. All six sou
 The blanket referral is currently added in `mdia/pipeline.py` for every Paddle-Arabic OCR page because `mdia/paddle_arabic.py` assigns `geometry_source="line_interpolated"` to token rectangles estimated from line boxes. `mdia/word_localization.py` can match some tokens to Tesseract boxes, but the code and its own module documentation explicitly say cross-engine matches are not ground-truth verification. Therefore, simply deleting the referral or setting `word_box_verified=True` would create a false PASS and is not an acceptable fix.
 
 Next work must implement and test a real source-localization path (or a verified native PDF text-layer path where the PDF genuinely contains one), with tests proving that each accepted field's evidence bbox encloses the correct printed token and does not overlap a neighboring value/row. Only after that should review referrals be recalculated from actual evidence quality. Separately, the 209 field mismatches and 11 spurious rows still need source-backed repairs. No merge, deployment, hidden handoff, error-ledger substitution, invented row, or arithmetic-only fill has occurred.
+
+
+## Artifact-level error decomposition from all six completed shards
+
+The six candidate ZIP artifacts for run 40907533409 were downloaded and inspected independently. They contain exactly 300 unique case results. The 209 failed checks decompose as follows:
+
+| Field group | Failed checks | Missing | Wrong |
+|---|---:|---:|---:|
+| Patient name | 42 | 28 | 14 |
+| Item quantity | 85 | 81 | 4 |
+| Item unit price | 37 | 8 | 29 |
+| Item line total | 26 | 8 | 18 |
+| Item description/name | 8 | 8 | 0 |
+| Invoice total | 11 | 11 | 0 |
+| **Total** | **209** | **144** | **65** |
+
+The table reconciles to the CI's 209 errors/missing fields. It helps prioritize source-backed work: quantities account for the largest single field group, while unit-price and line-total errors are often incorrect rather than absent. Some wrong amounts exhibit a scale error (for example, a unit price read as 4800 instead of the printed 48 while the row total remains 144). This is a diagnostic signal only: arithmetic must not overwrite the printed amount. The repair must re-read the original source crop and preserve the original reading/evidence.
+
+Patient-name errors are a separate Arabic OCR/normalization issue: some are missing; others preserve a visually similar but non-identical Arabic character (for example, ليلی vs ليلى). They must not be normalized to the expected value without source glyph evidence. The 11 extra rows are tracked separately from the 209 field checks and remain a hard blocker.
+
+This decomposition is based on the downloaded run artifacts, not on a new code change or a new test run. It does not change the acceptance status.
