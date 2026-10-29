@@ -1,0 +1,47 @@
+name: MDIA absolute zero-error release gate (not zero-referral proxy)
+on:
+  pull_request:
+    paths:
+      - 'scripts/check_zero_error300.py'
+      - 'tests/test_zero_error_acceptance.py'
+      - '.github/workflows/mdia-absolute-zero-error.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  gate-logic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Ensure zero handoffs cannot conceal an OCR mistake
+        run: python -m unittest tests.test_zero_error_acceptance -v
+  actual-300-quality-gate:
+    needs: gate-logic
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40789569785
+          github-token: ${{ github.token }}
+          pattern: mdia-rows-shard*
+          path: archived-real-paddle
+      - name: Demand 5776/5776 exact fields, zero invented rows and zero human referrals
+        run: |
+          python -m scripts.check_zero_error300 \
+            archived-real-paddle/*/results.json \
+            --output results/zero_error_acceptance.json \
+            --fail-if-not-perfect
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-absolute-zero-error-evidence
+          path: results/zero_error_acceptance.json
+          retention-days: 14
+          if-no-files-found: warn
