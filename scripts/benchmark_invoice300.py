@@ -300,6 +300,7 @@ def score_record(c, result, engine, flags):
         "human_handoffs": (result or {}).get("summary", {}).get("human_handoffs"),
         "machine_unresolved_count": doc.get("unresolved_machine_count"),
         "extraction_ready": doc.get("extraction_ready"),
+        "financial_approval": doc.get("financial_approval"),
         "automation_policy": doc.get("automation_policy"),
         "original_extraction_status": doc.get("processing_status"),
         "checks": checks,
