@@ -1,0 +1,94 @@
+name: MDIA zero-human mode — strict 300 real OCR invoices
+on:
+  pull_request:
+    paths:
+      - 'mdia/zero_human.py'
+      - 'mdia/pipeline.py'
+      - 'scripts/benchmark_invoice300.py'
+      - 'scripts/check_zero_human300.py'
+      - '.github/workflows/mdia-zero-human-300.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  source-paddle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_ZERO_HUMAN_MODE: '1'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR and fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Read 50 frozen PDFs with no manual referral and original OCR evidence
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/nohuman_shard${{ matrix.shard }}
+      - name: Check no per-invoice human referral or fabricated financial approval
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(next(Path("results").glob("nohuman_shard*/results.json")).read_text("utf-8"))
+          assert r["status"]=="completed_real_ocr" and len(r["results"])==50
+          assert not r["failure_records"]
+          for c in r["results"]:
+              assert c["automation_policy"]=="zero_human_fail_closed"
+              assert c["review_required"] is False and c["human_handoffs"]==0
+              assert c["financial_approval"] is False
+              assert isinstance(c["machine_unresolved_count"],int)
+              assert c["extraction_ready"]==(c["machine_unresolved_count"]==0)
+          print("zero human, fail-closed: 50/50")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-zero-human-shard${{ matrix.shard }}
+          path: results/nohuman_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  aggregate:
+    needs: source-paddle
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-zero-human-shard*
+          path: candidate
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40786930681
+          github-token: ${{ github.token }}
+          pattern: mdia-spacing-shard*
+          path: baseline
+      - name: Verify 300 zero human / no invented correctness against 95.29 percent baseline
+        run: |
+          python -m scripts.check_zero_human300 \
+            --previous baseline/*/results.json \
+            --current candidate/*/results.json \
+            --output results/zero_human300_proof.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-zero-human-300-proof
+          path: results/zero_human300_proof.json
+          retention-days: 14
+          if-no-files-found: warn
