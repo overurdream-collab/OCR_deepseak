@@ -42,4 +42,19 @@ Real full-300 run [40902985455](https://github.com/overurdream-collab/OCR_deepse
 
 `summarize_source_row_repair300.py` validates all 300 identities and all 5776 checks, rejects source/cache changes, reports every gained/lost field and new extra row, and separately runs the unchanged absolute gate. CI's final step **requires perfection**, so a partial improvement remains BLOCKED.
 
-The full updated 300-case acceptance has not yet completed for this change. Partial local replays and the historical 5510 result must not be presented as the final updated score. All source-location, arithmetic and review requirements remain visible. No error ledger, hidden handoff, invented row, or inferred quantity was introduced.
+## Latest full 300-case result — HEAD 5a24434f (run 40907533409)
+
+The paired full-dataset CI has now completed on the current PR head. All six source-PDF comparison shards succeeded; the absolute acceptance job correctly failed because the strict gate is not met: [workflow run 40907533409](https://github.com/overurdream-collab/OCR_deepseak/actions/runs/40907533409).
+
+- Baseline: **5510/5776** exact fields.
+- Candidate: **5567/5776** exact fields (**96.38%**), **+57 gains, zero lost correct fields**.
+- Remaining: **209 wrong/missing fields**, **11 unmatched extra rows**, **300/300 documents still require human review**, zero page failures, zero evidence-link gaps, and zero newly introduced extra rows.
+- Missing fields: `invoice.total` 11, `name` 8, `patient.name` 28, `price` 8, `qty` 81, `total` 8.
+- Incorrect fields: `patient.name` 14, `price` 29, `qty` 4, `total` 18. The previous baseline's invoice-number mismatches are no longer present in the candidate error list.
+- Final status: **BLOCKED**. This is a measured improvement, not release acceptance.
+
+## Next engineering blocker
+
+The blanket referral is currently added in `mdia/pipeline.py` for every Paddle-Arabic OCR page because `mdia/paddle_arabic.py` assigns `geometry_source="line_interpolated"` to token rectangles estimated from line boxes. `mdia/word_localization.py` can match some tokens to Tesseract boxes, but the code and its own module documentation explicitly say cross-engine matches are not ground-truth verification. Therefore, simply deleting the referral or setting `word_box_verified=True` would create a false PASS and is not an acceptable fix.
+
+Next work must implement and test a real source-localization path (or a verified native PDF text-layer path where the PDF genuinely contains one), with tests proving that each accepted field's evidence bbox encloses the correct printed token and does not overlap a neighboring value/row. Only after that should review referrals be recalculated from actual evidence quality. Separately, the 209 field mismatches and 11 spurious rows still need source-backed repairs. No merge, deployment, hidden handoff, error-ledger substitution, invented row, or arithmetic-only fill has occurred.
