@@ -77,7 +77,7 @@ def _one_printed_qty(words, name_box, unit_box, total_box, unit_value, total_val
         low,high=unit_box[2],name_box[0]
     else:
         return None
-    if high-low < .012 or high-low > .35:
+    if high-low < .012 or high-low > .45:
         return None
     candidates=[]
     for w in words:
