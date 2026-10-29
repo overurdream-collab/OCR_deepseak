@@ -63,6 +63,9 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 # image-only scans, this does nothing.
                 from .native_quantity import recover_native_quantities
                 recover_native_quantities(d, pdf, seg_pages)
+                # Correct a wrong monetary token only when a unique original-PDF text-layer amount is localized at its existing field box. No arithmetic inference.
+                from .native_money import recover_native_money
+                recover_native_money(d, pdf, seg_pages)
                 # For still-unreadable OCR quantity glyphs, use independent
                 # original-PDF-pixel Tesseract reading with strict corroboration.
                 from .quantity_reocr import recover_quantities
