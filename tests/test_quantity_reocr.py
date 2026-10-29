@@ -88,6 +88,36 @@ class IndependentQuantityTests(unittest.TestCase):
                 run([read(),read(mode="contrast4x")],d)
                 self.assertEqual(d,before)
 
+    def test_wrong_numeric_quantity_requires_independent_source_reread(self):
+        for raw in ("2", "m2"):
+            d=doc(); q=d["invoice_items"][0]["quantity"]
+            q.update(raw=raw,value=2.,status="extracted")
+            d["evidence"][0]["matched_text"]=raw
+            run([read("3",.96),read("3",.96,mode="contrast4x")],d)
+            self.assertEqual(q["value"],3.)
+            self.assertEqual(q["original_ocr_raw"],raw)
+            self.assertEqual(d["evidence"][0]["matched_text"],raw)
+
+    def test_numeric_mismatch_without_source_read_is_not_corrected(self):
+        d=doc();q=d["invoice_items"][0]["quantity"]
+        q.update(raw="2",value=2.,status="extracted")
+        d["evidence"][0]["matched_text"]="2"
+        run([],d)
+        self.assertEqual(q["value"],2.)
+
+    def test_correct_numeric_quantity_does_not_trigger_secondary_ocr(self):
+        d=doc();q=d["invoice_items"][0]["quantity"]
+        q.update(raw="3",value=3.,status="extracted")
+        d["evidence"][0]["matched_text"]="3"
+        calls=[]
+        def observed(*args):
+            calls.append(args)
+            return [read(),read(mode="contrast4x")]
+        before=copy.deepcopy(d)
+        recover_quantities(d,"synthetic.pdf",pages(),reader=observed)
+        self.assertEqual(calls,[])
+        self.assertEqual(d,before)
+
     def test_no_discount_assumption(self):
         d=doc()
         d["invoice_items"][0]["discount"]={"status":"extracted","value":4}
@@ -174,6 +204,29 @@ class IndependentQuantityTests(unittest.TestCase):
         run([read()],d)
         self.assertEqual(d["invoice_items"][1]["quantity"]["status"],"unreadable")
 
+
+
+class OriginalPixelRowIsolationTests(unittest.TestCase):
+    def test_adjacent_quantities_cannot_contaminate_the_source_digit(self):
+        import shutil
+        import tempfile
+        from pathlib import Path
+        from mdia.quantity_reocr import numeric_reocr_crop, choose_digit
+        from scripts.benchmark_invoice300 import new_case, english_invoice
+        if not shutil.which("tesseract"):
+            self.skipTest("real local Tesseract unavailable")
+        # Actual source coordinates from real Paddle's en_compact_12 trace.
+        # The old padded crop also included part of the preceding digit and
+        # the next row's 1; this must read the middle printed 3 independently.
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf=Path(tmp)/"adjacent_quantities.pdf"
+            english_invoice(pdf,new_case("en_compact",12))
+            reads=numeric_reocr_crop(pdf,1,[.53245,.23888,.54615,.25741])
+            selected=choose_digit(reads,94,282)
+        self.assertIsNotNone(selected)
+        self.assertEqual(selected["text"],"3")
+        self.assertGreaterEqual(selected["confidence"],.70)
+        self.assertTrue(.23888 <= selected["bbox"][1] < selected["bbox"][3] <= .25741)
 
 if __name__=="__main__":
     unittest.main()

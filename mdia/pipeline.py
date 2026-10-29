@@ -67,6 +67,8 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 # original-PDF-pixel Tesseract reading with strict corroboration.
                 from .quantity_reocr import recover_quantities
                 recover_quantities(d, pdf, seg_pages)
+                from .missing_quantity_reocr import recover_missing_quantities
+                recover_missing_quantities(d, pdf, seg_pages)
                 # Repair only missing/extraneous word boundaries in a
                 # source-observed medical service label. Preserve raw OCR,
                 # evidence linkage, financial fields and all review alerts.
