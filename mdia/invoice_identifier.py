@@ -35,3 +35,22 @@ def observed_invoice_id(pages):
     if len(unique) != 1:
         return None
     return matches[0]
+
+
+_PRINTED_WITH_TRAILING_OCR_NOISE = re.compile(
+    r"^(INV[-‐‑–—][0-9٠-٩۰-۹]{4,12})\\s+([0-9٠-٩۰-۹]{1,2})$", re.I
+)
+
+
+def independently_confirmed_invoice_id(raw, printed_identifier):
+    """Confirm only an already printed ID with an extra separate OCR token.
+
+    The original extraction must contain the *same complete identifier*
+    followed by a separate short number; a newly constructed or conflicting
+    ID is never accepted. Printed identifier comes from an independent
+    original-page OCR word in the page header, not from expected answers.
+    """
+    if not isinstance(raw, str) or not isinstance(printed_identifier, str):
+        return False
+    match = _PRINTED_WITH_TRAILING_OCR_NOISE.fullmatch(raw.strip())
+    return bool(match and match.group(1).casefold() == printed_identifier.casefold())
