@@ -62,6 +62,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 # only a digit that Tesseract itself visibly recognized.
                 from .quantity_reocr import recover_quantities
                 recover_quantities(d, pdf, seg_pages)
+                # A born-digital original PDF can supply a real, independently
+                # located quantity word even when forced OCR lost that glyph.
+                # Scanned/image-only PDFs have no native text and are untouched.
+                from .native_pdf_quantities import recover_native_pdf_quantities
+                recover_native_pdf_quantities(d, pdf, seg_pages)
                 # Repair only missing/extraneous word boundaries in a
                 # source-observed medical service label. Preserve raw OCR,
                 # evidence linkage, financial fields and all review alerts.
