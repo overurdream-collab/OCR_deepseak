@@ -82,7 +82,9 @@ def apply_zero_human_policy(doc):
     # A review queue built by legacy validation is not exhaustive for every
     # incomplete invoice item (e.g. an unreadable quantity without strict env).
     # Enforce every required financial row field in this opt-in policy.
-    if doc.get("document_type") in _FINANCIAL_DOC_TYPES:
+    if (doc.get("document_type") in _FINANCIAL_DOC_TYPES
+            or str(doc.get("document_type") or "").endswith("_invoice")
+            or doc.get("document_type") == "invoice"):
         for row in doc.get("invoice_items", []):
             for field_name in _MANDATORY_ITEM_FIELDS:
                 field = row.get(field_name) or {}
