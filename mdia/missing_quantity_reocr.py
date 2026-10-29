@@ -1,4 +1,4 @@
-"""Re-read a missing printed quantity at its explicit source table column.
+"""Re-read an absent or conflicting quantity at its explicit source table column.
 
 No divide-and-fill: require an observed Qty header, same-row description and
 both amounts, then two strong reproducible original-pixel digit readings.
@@ -6,7 +6,7 @@ both amounts, then two strong reproducible original-pixel digit readings.
 import math
 from decimal import Decimal, InvalidOperation
 
-from .quantity_reocr import numeric_reocr_crop, choose_digit, _digits
+from .quantity_reocr import numeric_reocr_crop, choose_digit, _digits, _numeric_ocr_trigger
 from .textutil import match_key
 
 HEADERS = {match_key(s) for s in ('Qty', 'Quantity', 'الكمية', 'الكميه')}
@@ -27,8 +27,9 @@ def recover_missing_quantities(doc,pdf_path,pages,reader=numeric_reocr_crop):
     evidence={e['id']:e for e in doc.get('evidence',[]) if e.get('id')}
     for item in doc.get('invoice_items',[]):
         q=item.get('quantity') or {}
-        if q.get('status')!='not_found' or q.get('raw') is not None or q.get('value') is not None:
-            continue
+        missing=(q.get('status')=='not_found' and q.get('raw') is None and q.get('value') is None)
+        conflict=(q.get('status')=='extracted' and _numeric_ocr_trigger(q.get('raw')))
+        if not (missing or conflict):continue
         p=by_page.get(item.get('page'))
         if p is None or p.flags.get('ocr_engine')!='paddleocr-v5-arabic':continue
         fields=[item.get(k) or {} for k in ('service_name','unit_price','line_total')]
@@ -43,6 +44,10 @@ def recover_missing_quantities(doc,pdf_path,pages,reader=numeric_reocr_crop):
             price,total=(Decimal(str(f.get('value'))) for f in fields[1:])
         except (InvalidOperation,ValueError,TypeError):continue
         if not all(x.is_finite() and x>0 for x in (price,total)):continue
+        if conflict:
+            try:old_value=Decimal(str(q.get('value')))
+            except (InvalidOperation,ValueError,TypeError):continue
+            if not old_value.is_finite() or old_value*price==total or q.get('page')!=p.number:continue
         headers=[w for w in p.words if match_key(w.text) in HEADERS
                  and .015<cy-w.cy<.6]
         if not headers:continue
@@ -75,6 +80,9 @@ def recover_missing_quantities(doc,pdf_path,pages,reader=numeric_reocr_crop):
             'source_anchor_evidence_ids':[f['evidence_id'] for f in fields],
             'quantity_header_text':[w.text for w in headers],
             'quantity_header_bboxes':[[w.x0,w.y0,w.x1,w.y1] for w in headers]})
+        if conflict:
+            q['original_ocr_raw']=q.get('raw')
+            q['original_ocr_evidence_id']=q.get('evidence_id')
         q.update(raw=selected['text'],value=float(digit),status='extracted',page=p.number,
                  confidence=round(selected['confidence'],3),verification='auto_verified',evidence_id=eid,
                  recovery_method='explicit_quantity_column_independent_pixel_read')

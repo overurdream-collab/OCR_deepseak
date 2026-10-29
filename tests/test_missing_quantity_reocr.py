@@ -59,9 +59,17 @@ class MissingQuantityTests(unittest.TestCase):
             if change=='source':p.flags={}
             old=copy.deepcopy(d);self.run_read(d,p,[read(),read(mode='contrast4x')]);self.assertEqual(d,old)
 
-    def test_existing_quantity_is_never_replaced_by_missing_field_path(self):
-        d,p=fixture();d['invoice_items'][0]['quantity'].update(status='extracted',raw='2',value=2.)
+    def test_correct_existing_quantity_is_never_replaced(self):
+        d,p=fixture();d['invoice_items'][0]['quantity'].update(status='extracted',raw='3',value=3.)
         old=copy.deepcopy(d);self.run_read(d,p,[read(),read(mode='contrast4x')]);self.assertEqual(d,old)
+
+    def test_conflicting_numeric_ocr_requires_new_column_pixel_evidence(self):
+        d,p=fixture();q=d['invoice_items'][0]['quantity']
+        q.update(status='extracted',raw='m2',value=2.,page=1,evidence_id='old')
+        self.run_read(d,p,[read(),read(mode='contrast4x')])
+        self.assertEqual(q['value'],3.)
+        self.assertEqual(q['original_ocr_raw'],'m2')
+        self.assertEqual(q['original_ocr_evidence_id'],'old')
 
     def test_strong_conflicting_independent_reads_block(self):
         d,p=fixture();old=copy.deepcopy(d)

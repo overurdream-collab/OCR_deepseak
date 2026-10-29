@@ -5,10 +5,16 @@ on:
       - 'mdia/native_quantity.py'
       - 'mdia/quantity_reocr.py'
       - 'mdia/missing_quantity_reocr.py'
+      - 'mdia/tables.py'
+      - 'mdia/extract.py'
+      - 'mdia/invoice_identifier.py'
       - 'scripts/compare_native_gap300.py'
       - 'scripts/summarize_source_row_repair300.py'
       - '.github/workflows/mdia-native-quantity-300.yml'
   workflow_dispatch:
+concurrency:
+  group: mdia-source-row-repair-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
@@ -38,7 +44,7 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install 'paddlepaddle==3.2.0' 'paddleocr==3.7.0' 'paddlex==3.7.2'
       - name: Source, ambiguity and absolute-gate regressions
-        run: python -m unittest tests.test_native_quantity tests.test_quantity_reocr tests.test_missing_quantity_reocr tests.test_zero_error_acceptance -v
+        run: python -m unittest tests.test_native_quantity tests.test_quantity_reocr tests.test_missing_quantity_reocr tests.test_arabic_ambiguous_rows tests.test_arabic_unheaded_fragments tests.test_invoice_identifier tests.test_source_row_summary tests.test_zero_error_acceptance -v
       - name: Same original PDFs and cached real OCR - baseline and candidate
         run: python -u -m scripts.compare_native_gap300 --shard ${{ matrix.shard }} --shards 6 --output results/shard${{ matrix.shard }}
       - uses: actions/upload-artifact@v4

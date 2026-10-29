@@ -193,7 +193,7 @@ def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
                 qv, pv, tv = (Decimal(str(v)) for v in
                               (qty.get("value"), p.get("value"), t.get("value")))
                 if (not all(v.is_finite() for v in (qv, pv, tv))
-                        or pv <= 0 or tv <= 0 or qv * pv == tv):
+                        or pv <= 0 or tv <= 0 or (qv * pv == tv and qty.get("confidence",1.) >= .70)):
                     continue
             except (InvalidOperation, ValueError, TypeError):
                 continue

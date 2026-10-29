@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from scripts import benchmark_invoice300 as benchmark
-from mdia import native_quantity, quantity_reocr, missing_quantity_reocr, paddle_arabic
+from mdia import native_quantity, quantity_reocr, missing_quantity_reocr, paddle_arabic, pipeline
 
 BASELINE = '5fbf98f51a2ac0b1df5f609a18743849faa6fe5a'
 
@@ -22,6 +22,8 @@ BASELINE = '5fbf98f51a2ac0b1df5f609a18743849faa6fe5a'
 def run(output, shard=0, shards=6):
     source = subprocess.check_output(['git', 'show', BASELINE + ':mdia/native_quantity.py'])
     crop_source = subprocess.check_output(['git', 'show', BASELINE + ':mdia/quantity_reocr.py'])
+    extract_source = subprocess.check_output(['git', 'show', BASELINE + ':mdia/extract.py'])
+    tables_source = subprocess.check_output(['git', 'show', BASELINE + ':mdia/tables.py'])
     baseline_records = []
     cases = {c['id'] + '.pdf': c for c in benchmark.all_cases()}
     # Bound inference threads so paired shards do not oversubscribe a CPU host.
@@ -52,11 +54,27 @@ def run(output, shard=0, shards=6):
         crop_spec = importlib.util.spec_from_file_location('mdia._baseline_quantity_reocr', crop_path)
         old_crop = importlib.util.module_from_spec(crop_spec)
         crop_spec.loader.exec_module(old_crop)
+        extract_path=Path(tmp)/'old_extract.py'
+        extract_path.write_bytes(extract_source)
+        extract_spec=importlib.util.spec_from_file_location('mdia._baseline_extract',extract_path)
+        old_extract=importlib.util.module_from_spec(extract_spec)
+        extract_spec.loader.exec_module(old_extract)
+        tables_path=Path(tmp)/'old_tables.py'
+        tables_path.write_bytes(tables_source)
+        tables_spec=importlib.util.spec_from_file_location('mdia._baseline_tables',tables_path)
+        old_tables=importlib.util.module_from_spec(tables_spec)
+        # dataclasses resolves the defining module through sys.modules.
+        import sys
+        sys.modules[tables_spec.name]=old_tables
+        tables_spec.loader.exec_module(old_tables)
+        for name in ('find_tables','header_columns','unheaded_arabic_invoice_rows'):
+            setattr(old_extract,name,getattr(old_tables,name))
 
         def compare_process(store, jid, **kwargs):
             with patch.object(native_quantity, 'recover_native_quantities', old.recover_native_quantities), \
                     patch.object(quantity_reocr, 'recover_quantities', old_crop.recover_quantities), \
-                    patch.object(missing_quantity_reocr, 'recover_missing_quantities', lambda doc,*args: doc):
+                    patch.object(missing_quantity_reocr, 'recover_missing_quantities', lambda doc,*args: doc), \
+                    patch.object(pipeline, 'extract_document', old_extract.extract_document):
                 baseline = original_process(store, jid, **kwargs)
             flags = [json.loads(p.read_text('utf-8'))['flags']
                      for p in store.path(jid, 'pages').glob('*.json')]
