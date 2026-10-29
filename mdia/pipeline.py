@@ -57,9 +57,14 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 seg_pages = [p for p in pages if p.number in seg.pages]
                 seg_classes = [c for p, c in zip(pages, classes) if p.number in seg.pages]
                 d = extract_document(job_id, doc_id, seg, seg_pages, seg_classes)
-                # Re-read OCR's literal M-shaped quantity from original local
-                # PDF pixels with an independent model. Arithmetic corroborates
-                # only a digit that Tesseract itself visibly recognized.
+                # A native PDF text layer is independent source evidence for
+                # a missing OCR quantity. It may supply only a printed digit
+                # in the observed same row, never an arithmetic guess. For
+                # image-only scans, this does nothing.
+                from .native_quantity import recover_native_quantities
+                recover_native_quantities(d, pdf, seg_pages)
+                # For still-unreadable OCR quantity glyphs, use independent
+                # original-PDF-pixel Tesseract reading with strict corroboration.
                 from .quantity_reocr import recover_quantities
                 recover_quantities(d, pdf, seg_pages)
                 # Repair only missing/extraneous word boundaries in a
