@@ -181,13 +181,15 @@ class ZeroHumanPolicyTests(unittest.TestCase):
             def save_result(self,j,result):self.saved=result
         store=StoreStub()
         def fake_validate(doc):return doc
-        with patch.object(pipeline,"read_document",return_value=[page]), \\
-             patch.object(pipeline,"classify_page",return_value="mock"), \\
-             patch.object(pipeline,"segment",return_value=[seg]), \\
-             patch.object(pipeline,"extract_document",return_value=d), \\
-             patch.object(pipeline,"validate_document",side_effect=fake_validate), \\
-             patch("mdia.quantity_reocr.recover_quantities",return_value=None), \\
-             patch("mdia.service_spacing.repair_document_service_names",return_value=None):
+        with (
+            patch.object(pipeline,"read_document",return_value=[page]),
+            patch.object(pipeline,"classify_page",return_value="mock"),
+            patch.object(pipeline,"segment",return_value=[seg]),
+            patch.object(pipeline,"extract_document",return_value=d),
+            patch.object(pipeline,"validate_document",side_effect=fake_validate),
+            patch("mdia.quantity_reocr.recover_quantities",return_value=None),
+            patch("mdia.service_spacing.repair_document_service_names",return_value=None),
+        ):
             result=process_job(store,"synthetic-job",zero_human=True)
         self.assertIsNotNone(result)
         self.assertEqual(result["processing_status"],"blocked_unresolved")
