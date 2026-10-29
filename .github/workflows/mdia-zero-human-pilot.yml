@@ -1,0 +1,35 @@
+name: MDIA zero-human fail-closed pilot — machine-only unit gate
+on:
+  pull_request:
+    paths:
+      - 'mdia/zero_human.py'
+      - 'mdia/pipeline.py'
+      - 'mdia/schema.py'
+      - 'schema/mdia.schema.json'
+      - 'tests/test_zero_human_policy.py'
+      - '.github/workflows/mdia-zero-human-pilot.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify-no-human-routing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test no human handoffs, strict block, immutable evidence, compatibility
+        run: |
+          python -m unittest tests.test_zero_human_policy -v
+          python -m unittest tests.test_review_triage tests.test_quantity_reocr tests.test_service_spacing -v
+      - name: Check published JSON schema matches generator
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from mdia.schema import build
+          assert json.loads(Path("schema/mdia.schema.json").read_text("utf-8")) == build(), "schema drift"
+          print("schema consistent")
+          PY
