@@ -42,8 +42,9 @@ def build():
                          "evidence_id": {"type": ["string", "null"]}, "page": {"type": ["integer", "null"]},
                          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
                          "status": {"enum": ["extracted", "not_found", "unreadable", "ambiguous"]},
-                         "verification": {"enum": ["unverified", "auto_verified", "needs_review", "corrected", "not_applicable"]},
+                         "verification": {"enum": ["unverified", "auto_verified", "needs_review", "machine_unresolved", "corrected", "not_applicable"]},
                          "review_reasons": {"type": "array", "items": {"type": "string"}},
+                         "original_verification": {"type": "string"},
                          "alternatives": {"type": "array", "items": {"type": "object"}},
                          "corrected_value": {}}}
     ev = {"type": "object", "required": ["id", "document_id", "page", "text", "matched_text", "bbox", "method", "confidence"],
@@ -66,12 +67,18 @@ def build():
     group = lambda names: {"type": "object", "properties": {n: {"$ref": "#/$defs/FieldValue"} for n in names}}
     doc_props = {
         "document_id": {"type": "string"}, "document_type": {"type": "string"},
-        "processing_status": {"enum": ["completed", "completed_with_review", "failed"]},
+        "processing_status": {"enum": ["completed", "completed_with_review", "blocked_unresolved", "failed"]},
         "pages": {"type": "array", "items": {"type": "integer"}},
         "patient": group(PATIENT), "provider": group(PROVIDER), "hospitalization": group(HOSP),
         "evidence": {"type": "array", "items": {"$ref": "#/$defs/Evidence"}},
         "warnings": {"type": "array", "items": {"$ref": "#/$defs/Warning"}},
         "requires_human_review": {"type": "array", "items": {"$ref": "#/$defs/ReviewItem"}},
+        "automation_policy": {"type": "string"},
+        "machine_unresolved_checks": {"type": "array", "items": {"type": "object"}},
+        "unresolved_machine_count": {"type": "integer", "minimum": 0},
+        "human_handoff_count": {"type": "integer", "minimum": 0},
+        "extraction_ready": {"type": "boolean"},
+        "financial_approval": {"type": "boolean"},
     }
     for k in ENTITIES:
         doc_props[k] = {"type": "array", "items": {"$ref": f"#/$defs/{k}_record"}}
@@ -86,8 +93,9 @@ def build():
             "title": "MDIA extraction result", "type": "object",
             "required": ["schema_version", "job_id", "source", "processing_status", "documents", "document_links", "summary"],
             "properties": {"schema_version": {"const": "1.0"}, "job_id": {"type": "string"}, "source": {"type": "object"},
-                           "processing_status": {"enum": ["completed", "completed_with_review", "completed_with_errors"]},
+                           "processing_status": {"enum": ["completed", "completed_with_review", "completed_with_errors", "blocked_unresolved"]},
                            "documents": {"type": "array", "items": {"$ref": "#/$defs/Document"}},
+                           "automation_policy": {"type": "string"},
                            "document_links": {"type": "array", "items": {"type": "object"}},
                            "page_info": {"type": "array"}, "summary": {"type": "object"}},
             "$defs": defs}
