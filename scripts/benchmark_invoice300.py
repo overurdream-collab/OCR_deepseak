@@ -297,6 +297,11 @@ def score_record(c, result, engine, flags):
         "page_failures": faults,
         "real_paddle_detected": any(f.get("ocr_engine") == "paddleocr-v5-arabic" for f in flags),
         "review_required": bool(doc.get("requires_human_review")),
+        "human_handoffs": (result or {}).get("summary", {}).get("human_handoffs"),
+        "machine_unresolved_count": doc.get("unresolved_machine_count"),
+        "extraction_ready": doc.get("extraction_ready"),
+        "automation_policy": doc.get("automation_policy"),
+        "original_extraction_status": doc.get("processing_status"),
         "checks": checks,
     }
 
