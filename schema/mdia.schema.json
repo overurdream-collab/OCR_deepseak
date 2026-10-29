@@ -109,9 +109,9 @@
             "unverified",
             "auto_verified",
             "needs_review",
+            "machine_unresolved",
             "corrected",
-            "not_applicable",
-            "machine_unresolved"
+            "not_applicable"
           ]
         },
         "review_reasons": {
@@ -305,8 +305,8 @@
           "enum": [
             "completed",
             "completed_with_review",
-            "failed",
-            "blocked_unresolved"
+            "blocked_unresolved",
+            "failed"
           ]
         },
         "pages": {
