@@ -1,5 +1,7 @@
 # Feature Specification: Arabic Invoice Table Acceptance Gates
 
+> **HISTORICAL FEATURE — SUPERSEDED for current MDIA outcome (2026-10-29).** The original 2026-10-28 acceptance-gate feature below describes an earlier human-review workflow. It is retained only as a record of the original frozen 300-case quality gate. The owner's current governing target is `specs/002-zero-error-ocr/spec.md`: zero wrong/missing/invented fields AND zero human handoffs together. No instruction below to route cases to humans may override that later feature or the revised constitution. Neither target has been achieved by renaming errors.
+
 **Feature Branch**: `feat/mdia-spec-kit-acceptance`
 
 **Created**: 2026-10-28
