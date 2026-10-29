@@ -1,0 +1,22 @@
+name: MDIA printed invoice identifier evidence - unit safety
+on:
+  pull_request:
+    paths:
+      - 'mdia/invoice_id_cleanup.py'
+      - 'mdia/extract.py'
+      - 'tests/test_invoice_id_cleanup.py'
+      - '.github/workflows/mdia-invoice-id-cleanup.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  printed-original-source-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Only exact standalone printed source can resolve OCR ID suffix
+        run: python -m unittest tests.test_invoice_id_cleanup tests.test_invoice_identifier -v
