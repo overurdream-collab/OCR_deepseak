@@ -46,6 +46,39 @@ def apply_zero_human_policy(doc):
                           raw=item.get("raw"), page=item.get("page"),
                           evidence_id=item.get("evidence_id")))
 
+    # Turn a legacy review flag into an explicitly UNRESOLVED machine flag,
+    # never a successful verification. Scan for review flags that might have
+    # been omitted from the legacy queue as well.
+    groups = ("patient", "provider", "hospitalization")
+    for name in groups:
+        record = doc.get(name) or {}
+        for field_name, field in record.items():
+            if not isinstance(field, dict) or field.get("verification") != "needs_review":
+                continue
+            field["original_verification"] = "needs_review"
+            field["verification"] = "machine_unresolved"
+            if not any(x["field"] == field_name and x["record_id"] == doc.get("document_id", "") + ":" + name
+                       for x in unresolved):
+                unresolved.append(_blocker(doc.get("document_id", "") + ":" + name,
+                                           field_name, field.get("review_reasons") or ["low_confidence"],
+                                           raw=field.get("raw"), page=field.get("page"),
+                                           evidence_id=field.get("evidence_id")))
+
+    for group in ("invoices", "invoice_items", "medications", "diagnoses",
+                  "laboratory_tests", "imaging", "procedures"):
+        for record in doc.get(group) or []:
+            for field_name, field in record.items():
+                if not isinstance(field, dict) or field.get("verification") != "needs_review":
+                    continue
+                field["original_verification"] = "needs_review"
+                field["verification"] = "machine_unresolved"
+                if not any(x["field"] == field_name and x["record_id"] == record.get("id")
+                           for x in unresolved):
+                    unresolved.append(_blocker(record.get("id"), field_name,
+                        field.get("review_reasons") or ["low_confidence"],
+                        raw=field.get("raw"), page=field.get("page"),
+                        evidence_id=field.get("evidence_id")))
+
     # A review queue built by legacy validation is not exhaustive for every
     # incomplete invoice item (e.g. an unreadable quantity without strict env).
     # Enforce every required financial row field in this opt-in policy.
@@ -96,8 +129,24 @@ def apply_zero_human_policy(doc):
     doc["extraction_ready"] = not deduped and doc.get("processing_status") != "failed"
     # Extraction-ready is NOT medical or financial approval.
     doc["financial_approval"] = False
-    if not doc["extraction_ready"]:
+    if doc.get("processing_status") != "failed":
+        doc["processing_status"] = ("completed" if doc["extraction_ready"]
+                                     else "blocked_unresolved")
+    return doc
+
+
+def record_machine_issue(doc, field, reason):
+    """Record a newly discovered machine blocker *after* initial validation."""
+    ledger = doc.setdefault("machine_unresolved_checks", [])
+    issue = _blocker(doc.get("document_id"), field, [reason])
+    if not any(x.get("field") == field and reason in x.get("reasons", [])
+               for x in ledger):
+        ledger.append(issue)
+    doc["unresolved_machine_count"] = len(ledger)
+    doc["extraction_ready"] = False
+    doc["financial_approval"] = False
+    doc["human_handoff_count"] = 0
+    doc["requires_human_review"] = []
+    if doc.get("processing_status") != "failed":
         doc["processing_status"] = "blocked_unresolved"
-    else:
-        doc["processing_status"] = "completed"
     return doc
