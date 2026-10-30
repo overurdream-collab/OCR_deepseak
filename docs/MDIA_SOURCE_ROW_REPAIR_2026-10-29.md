@@ -79,3 +79,28 @@ The table reconciles to the CI's 209 errors/missing fields. It helps prioritize 
 Patient-name errors are a separate Arabic OCR/normalization issue: some are missing; others preserve a visually similar but non-identical Arabic character (for example, ليلی vs ليلى). They must not be normalized to the expected value without source glyph evidence. The 11 extra rows are tracked separately from the 209 field checks and remain a hard blocker.
 
 This decomposition is based on the downloaded run artifacts, not on a new code change or a new test run. It does not change the acceptance status.
+
+## Latest paired 300-case result — HEAD 383253f (run 40932647895)
+
+The subsequent integrated candidate was re-run against the exact frozen original PDFs and OCR caches. All six paired-source shards completed; the separate absolute acceptance job failed as intended. The machine-readable absolute proof artifact is `source-row-full-proof.json`.
+
+- Baseline: **5516/5776** exact; candidate: **5573/5776 (96.48%)** exact.
+- Net gain: **57 fields**, with **zero lost previously correct fields** and **zero newly introduced extra rows**.
+- Remaining: **203 incorrect/missing field checks**, **11 unmatched extra rows**, **6 evidence-link gaps**, and **300/300 documents still require human review**.
+- No page failures.
+- By field group: quantity **85**; patient name **42**; unit price **35**; line total **22**; invoice total **11**; service name **8**.
+- By layout: Arabic visual **91**, Arabic mixed **57**, Arabic shaped **53**, English compact **1**, English reordered **1**, English standard **0** field mismatches. Extra rows are concentrated in Arabic visual (8) plus one each in compact, reordered and standard; mixed and shaped have zero in this run.
+
+The latest count differs from the earlier 5,567/5,776 report because this workflow compares against a different, explicitly frozen starting commit and produces a different paired baseline (5,516 rather than 5,510). These runs must not be mixed into one trend line. The current paired comparison is the authoritative result for HEAD `383253f6594c74f43f96105c5018e8a7e7b1a7d6`.
+
+### Error interpretation and next repair order
+
+1. **Arabic visual layout is the largest structural blocker.** It has 91 failed field checks and 8 extra rows. Some cases lose an entire charge row (name, quantity, price and total together), which is a row-detection/association problem, not four independent OCR substitutions. The next fix must preserve source-row grouping and reject pseudo-rows; do not fill a row from expected row counts.
+2. **Quantities remain the largest single field class (85).** The current recovery paths already require a printed source digit and independent pixel reads. Further quantity work must trace the original crop for each remaining case and distinguish no glyph, weak glyph, wrong column and wrong row before changing thresholds.
+3. **Money fields (57 combined price/line-total failures) include scale and character errors.** Examples include OCR reading 48.00 as 4800 and a line total with an extra leading digit. A new correction path must independently re-read a tightly bounded original-PDF crop and preserve both original and replacement evidence. Multiplication may only corroborate a source-read candidate; it must never choose or generate the amount.
+4. **Patient-name failures (42) must not be normalized by guessing.** In particular, final Persian Yeh can represent Arabic Yeh or Alef Maqsura; the current conservative logic intentionally leaves this ambiguous. Preserve raw text and review unless the original glyph is independently resolved.
+5. **Six evidence gaps and 11 extra rows remain hard blockers.** They cannot be hidden by marking documents complete or suppressing referrals.
+
+### Current decision
+
+**BLOCKED — do not merge or release.** This is a measured, lossless +57-field improvement on the paired dataset, not full acceptance. Next coding should isolate Arabic-visual missing-row cases and source-crop monetary misreads in separate experiments, each with per-case proof and the same full 300-case non-regression gate. No review suppression, arithmetic-only fill, or production approval.
