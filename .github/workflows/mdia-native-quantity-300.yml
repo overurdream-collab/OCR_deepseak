@@ -30,6 +30,7 @@ jobs:
       OMP_NUM_THREADS: '1'
       PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
       MDIA_EVIDENCE_RECONCILIATION: '1'
+      MDIA_PADDLE_WORD_ALIGN: '1'
     steps:
       - uses: actions/checkout@v4
         with:
