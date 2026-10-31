@@ -78,6 +78,9 @@ def run(output, shard=0, shards=6):
                 baseline = original_process(store, jid, **kwargs)
             flags = [json.loads(p.read_text('utf-8'))['flags']
                      for p in store.path(jid, 'pages').glob('*.json')]
+            if os.environ.get('MDIA_OCR_IMAGE_ENHANCE', '0') == '1':
+                if not flags or any(f.get('ocr_image_enhanced') is not True for f in flags):
+                    raise RuntimeError('image enhancement requested but not applied to every OCR page')
             case = cases[store.status(jid)['filename']]
             page_files=sorted(store.path(jid,'pages').glob('*.json'))
             cache_hash=hashlib.sha256(b''.join(p.read_bytes() for p in page_files)).hexdigest()
