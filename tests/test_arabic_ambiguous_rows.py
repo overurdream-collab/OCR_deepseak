@@ -38,6 +38,24 @@ class ArabicAmbiguousRowTests(unittest.TestCase):
                 self.assertIsNone(q["value"])
                 self.assertEqual(q["verification"], "needs_review")
 
+    def test_low_confidence_literal_keeps_a_fully_source_observed_charge_row(self):
+        lines=self.fixture("1")
+        lines[0]=line(0,.176,"أجرة غرفة","1","182.50","182.50",qty_conf=.597)
+        t=unheaded_arabic_invoice_rows(page(lines))
+        self.assertEqual(len(t.rows),4)
+        self.assertEqual(t.rows[0].cells["qty"][0].text,"1")
+        self.assertEqual(t.rows[0].cells["unit_price"][0].text,"182.50")
+        self.assertEqual(t.rows[0].cells["total"][0].text,"182.50")
+
+    def test_low_confidence_literal_still_needs_column_anchors_and_source(self):
+        for confidence,x in ((.39,.48),(.597,.60)):
+            lines=self.fixture("1")
+            lines[0]=line(0,.176,"أجرة غرفة","1","182.50","182.50",qty_conf=confidence,qty_x=x)
+            self.assertEqual(len(unheaded_arabic_invoice_rows(page(lines)).rows),3)
+        lines=self.fixture("1")[:2]
+        lines[0]=line(0,.176,"أجرة غرفة","1","182.50","182.50",qty_conf=.597)
+        self.assertEqual(len(unheaded_arabic_invoice_rows(page(lines)).rows),1)
+
     def test_second_engine_is_not_replaced_by_arithmetic_guess(self):
         self.assertIsNone(choose_digit([], 59.25, 177.75, orig_token="w"))
         self.assertIsNone(choose_digit([], 59.25, 177.75, orig_token="H"))

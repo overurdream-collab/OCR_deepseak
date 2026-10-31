@@ -77,7 +77,7 @@ def _one_printed_qty(words, name_box, unit_box, total_box, unit_value, total_val
         low,high=unit_box[2],name_box[0]
     else:
         return None
-    if high-low < .012 or high-low > .45:
+    if high-low < .012 or high-low > .65:
         return None
     candidates=[]
     for w in words:
@@ -87,12 +87,13 @@ def _one_printed_qty(words, name_box, unit_box, total_box, unit_value, total_val
         if not re.fullmatch(r"[1-9][0-9]?",token):
             continue
         digit=int(token)
-        if Decimal(digit)*unit_value != total_value:
-            continue
         candidates.append((digit,w))
     # Two adjacent numerals, alternative OCR segments or duplicate evidence
     # are ambiguous; do not borrow a number from a nearby row.
-    return candidates[0] if len(candidates)==1 else None
+    if len(candidates) != 1:
+        return None
+    digit, word = candidates[0]
+    return (digit, word) if Decimal(digit) * unit_value == total_value else None
 
 
 def recover_native_quantities(doc, pdf_path, pages):

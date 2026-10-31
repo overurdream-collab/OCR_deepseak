@@ -1,6 +1,6 @@
 """No guessed digits: recover exactly printed invoice IDs from OCR headers."""
 import unittest
-from mdia.invoice_identifier import observed_invoice_id
+from mdia.invoice_identifier import observed_invoice_id, independently_confirmed_invoice_id
 from mdia.extract import Ctx
 from mdia.model import Line, Page, Word
 
@@ -55,6 +55,35 @@ class InvoiceIdentifierTests(unittest.TestCase):
     def test_not_from_body_or_non_ocr_source(self):
         self.assertIsNone(observed_invoice_id([page([token("INV-710111",.1,.3,.51)])]))
         self.assertIsNone(observed_invoice_id([page([token("INV-710111",.1,.3)],method="text-layer")]))
+
+    def test_confirm_only_printed_identifier_when_extra_ocr_number_appended(self):
+        cases = (
+            ("INV-710148 2", "INV-710148"),
+            ("INV-710159 9", "INV-710159"),
+            ("INV-710254 2", "INV-710254"),
+            ("INV-710033 2", "INV-710033"),
+        )
+        for raw, printed in cases:
+            with self.subTest(raw=raw):
+                self.assertTrue(independently_confirmed_invoice_id(raw,printed))
+                self.assertFalse(independently_confirmed_invoice_id(raw,printed[:-1]+"0"))
+
+    def test_do_not_guess_or_strip_valid_ids_and_other_invoice_formats(self):
+        samples = (
+            ("INV-710148", "INV-710148"),
+            ("INV-710148 2", "INV-710149"),
+            ("INV-710148 2 3", "INV-710148"),
+            ("INV-710148 99 2", "INV-710148"),
+            ("AB-710148 2", "AB-710148"),
+            ("INV-710148 extra", "INV-710148"),
+            ("INV-7101482", "INV-710148"),
+            ("INV-710148.2", "INV-710148"),
+            ("INV-710148 / 2", "INV-710148"),
+            (None, "INV-710148"),
+        )
+        for raw, printed in samples:
+            with self.subTest(raw=raw):
+                self.assertFalse(independently_confirmed_invoice_id(raw,printed))
 
     def test_do_not_take_embedded_suffix_after_id(self):
         p=page([token("No:INV-710159",.15,.36),token("9",.37,.39)])
