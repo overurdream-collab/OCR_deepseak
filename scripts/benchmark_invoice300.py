@@ -322,7 +322,7 @@ def run(output_dir, shard=0, shards=6, engines=("tesseract", "paddle_arabic", "p
                     old_review = os.environ.get("MDIA_STRICT_INVOICE_REVIEW")
                     try:
                         os.environ["MDIA_OCR_ENGINE"] = "paddle_arabic" if engine == "paddle_arabic_enhanced" else engine
-                        os.environ["MDIA_PADDLE_WORD_ALIGN"] = "0"
+                        os.environ["MDIA_PADDLE_WORD_ALIGN"] = old_align if old_align is not None else "0"
                         os.environ["MDIA_OCR_IMAGE_ENHANCE"] = "1" if engine == "paddle_arabic_enhanced" else "0"
                         os.environ["MDIA_STRICT_INVOICE_REVIEW"] = "1" if engine == "paddle_arabic_enhanced" else "0"
                         result = process_job(store, jid, ocr_mode="force")
