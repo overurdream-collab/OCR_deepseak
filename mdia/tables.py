@@ -269,25 +269,144 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
         return None
     from .textutil import parse_number
     rows = []
-    for ln in page.lines:
+    consumed = set()
+    # Exact normalized Arabic summary captions: never bill these as services.
+    # Avoid broad substring rules that might remove a genuine charge name.
+    summary_labels = {tuple(sorted(match_key(s).split())) for s in (
+        "المجموع قبل الخصم", "المجموع", "الخصم", "الضريبة",
+        "إجمالي الفاتورة", "الإجمالي", "صافي المبلغ", "صافي الإجمالي",
+        "المبلغ المستحق", "الرصيد المستحق", "المدفوع", "الإجمالي النهائي",
+    )}
+
+    def cells_for(ln):
+        """Only copy three observed, independently readable numeric tokens."""
         if line_pairs(ln) or header_columns(ln):
-            continue
+            return None
         numbers = sorted([w for w in ln.words if w.conf >= .65 and parse_number(w.text) is not None
                           and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)], key=lambda w: w.cx, reverse=True)
         if len(numbers) != 3:
-            continue
+            return None
         # Arabic data rows normally print the description to the right of qty, then unit price and total.
         qty, unit_price, line_total = numbers
         if not (qty.cx > unit_price.cx > line_total.cx):
-            continue
+            return None
         if parse_number(qty.text) <= 0 or parse_number(unit_price.text) < 0 or parse_number(line_total.text) < 0:
-            continue
+            return None
         desc = [w for w in ln.words if w.cx > qty.cx and w.conf >= .65 and has_ar(w.text)
                 and len(match_key(w.text)) >= 2]
-        if not desc:
+        if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
+            return None
+        return {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
+
+    def split_pair(a, b):
+        """Merge only neighboring, disjoint OCR fragments of ONE printed row.
+
+        OCR sometimes puts the Arabic service at a slightly different y from
+        its numeric cells. Never combine separate billable rows, overlapping
+        fragments, or two different service labels. Both original line IDs
+        remain attached to the result for source evidence and human review.
+        """
+        if abs(a.y - b.y) > .85 * min(a.height, b.height):
+            return None
+        a_left, a_right = min(w.x0 for w in a.words), max(w.x1 for w in a.words)
+        b_left, b_right = min(w.x0 for w in b.words), max(w.x1 for w in b.words)
+        if not (a_right <= b_left + .003 or b_right <= a_left + .003):
+            return None
+        arabic_a = any(has_ar(w.text) for w in a.words)
+        arabic_b = any(has_ar(w.text) for w in b.words)
+        if arabic_a == arabic_b:  # exactly one fragment contains the service name
+            return None
+        merged = Line(page.number, a.idx, sorted(a.words + b.words, key=lambda w: w.x0), rtl=True)
+        return cells_for(merged)
+
+    for i, ln in enumerate(page.lines):
+        if ln.idx in consumed:
             continue
-        cells = {"name": desc, "qty": [qty], "unit_price": [unit_price], "total": [line_total]}
-        rows.append(Row([ln.idx], cells, inherited=True))
+        cells = cells_for(ln)
+        line_idxs = [ln.idx]
+        if cells is None and i + 1 < len(page.lines):
+            nxt = page.lines[i + 1]
+            if nxt.idx not in consumed and cells_for(nxt) is None:
+                cells = split_pair(ln, nxt)
+                if cells:
+                    line_idxs.append(nxt.idx)
+                    consumed.add(nxt.idx)
+        if cells:
+            rows.append(Row(line_idxs, cells, inherited=True))
+    # Second pass: sometimes OCR recognizes the printed quantity (e.g. 3)
+    # as a letter "M". Recover ONLY the independently observed description,
+    # unit price, and line total. Keep that OCR glyph as an UNREADABLE qty;
+    # never infer its number from arithmetic, a lexicon, or sibling rows.
+    # At least TWO fully parsed rows must establish independent column anchors.
+    if len(rows) >= 2:
+        anchors = {}
+        for key in ("qty", "unit_price", "total"):
+            xs = [r.cells[key][0].cx for r in rows if len(r.cells.get(key, [])) == 1]
+            xs.sort()
+            if len(xs) < 2 or xs[-1] - xs[0] > .045:
+                break
+            anchors[key] = xs[len(xs) // 2]
+        if (len(anchors) == 3 and
+                anchors["qty"] > anchors["unit_price"] > anchors["total"]):
+            line_at = {ln.idx: ln for ln in page.lines}
+            anchor_y = sorted(
+                line_at[r.line_idxs[0]].y for r in rows
+                if r.line_idxs[0] in line_at
+            )
+            for ln in page.lines:
+                if ln.idx in consumed or any(ln.idx in r.line_idxs for r in rows):
+                    continue
+                if not (anchor_y[0] - .075 <= ln.y <= anchor_y[-1] + .075):
+                    continue
+                if line_pairs(ln) or header_columns(ln):
+                    continue
+                # Source-Paddle traces also contain H, w, R and I in the
+                # printed numeric quantity column. Such letters are NOT
+                # numbers: retain each raw glyph as unreadable and allow the
+                # separate original-PDF re-OCR guard to confirm a digit later.
+                # Do not accept punctuation/dashes, ordinary Arabic words,
+                # or characters merely guessed from mathematical totals.
+                from .quantity_reocr import ELIGIBLE_OCR_GLYPHS
+                observed_ambiguous = ELIGIBLE_OCR_GLYPHS & {"M", "H", "w", "R", "I"}
+                # A low-confidence literal quantity must not discard an
+                # otherwise fully observed charge row. Two established rows
+                # still own the columns; only a literal 1..99 source token
+                # or the previously supported OCR glyph may occupy qty.
+                def candidate_qty(w):
+                    literal = (bool(re.fullmatch(r"[1-9٠-٩][0-9٠-٩]?", w.text))
+                               and parse_number(w.text) > 0)
+                    return ((w.text in observed_ambiguous and w.conf >= .65)
+                            or (literal and .40 <= w.conf < .65))
+                unreadable = [w for w in ln.words if candidate_qty(w)
+                              and abs(w.cx - anchors["qty"]) <= .025]
+                if len(unreadable) != 1:
+                    continue
+                numbers = sorted(
+                    [w for w in ln.words if w.conf >= .65
+                     and re.fullmatch(r"[\d.,٠-٩٫٬]+", w.text)
+                     and parse_number(w.text) is not None],
+                    key=lambda w: w.cx, reverse=True
+                )
+                if len(numbers) != 2:
+                    continue
+                unit_price, line_total = numbers
+                if (abs(unit_price.cx - anchors["unit_price"]) > .025 or
+                        abs(line_total.cx - anchors["total"]) > .025 or
+                        not unreadable[0].cx > unit_price.cx > line_total.cx or
+                        parse_number(unit_price.text) < 0 or
+                        parse_number(line_total.text) < 0):
+                    continue
+                desc = [w for w in ln.words if w.cx > unreadable[0].cx
+                        and w.conf >= .65 and has_ar(w.text)
+                        and len(match_key(w.text)) >= 2]
+                if not desc or tuple(sorted(part for w in desc for part in w.key.split())) in summary_labels:
+                    continue
+                rows.append(Row([ln.idx], {
+                    "name": desc, "qty": unreadable, "unit_price": [unit_price],
+                    "total": [line_total],
+                }, inherited=True))
+                consumed.add(ln.idx)
+            rows.sort(key=lambda r: min(r.line_idxs))
     if not rows:
         return None
     t = Table("invoice", page.number, None, [], rows=rows, rtl=True, inherited=True)

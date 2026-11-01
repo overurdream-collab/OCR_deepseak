@@ -57,6 +57,26 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                 seg_pages = [p for p in pages if p.number in seg.pages]
                 seg_classes = [c for p, c in zip(pages, classes) if p.number in seg.pages]
                 d = extract_document(job_id, doc_id, seg, seg_pages, seg_classes)
+                # A native PDF text layer is independent source evidence for
+                # a missing OCR quantity. It may supply only a printed digit
+                # in the observed same row, never an arithmetic guess. For
+                # image-only scans, this does nothing.
+                from .native_quantity import recover_native_quantities
+                recover_native_quantities(d, pdf, seg_pages)
+                # Correct a wrong monetary token only when a unique original-PDF text-layer amount is localized at its existing field box. No arithmetic inference.
+                from .native_money import recover_native_money
+                recover_native_money(d, pdf, seg_pages)
+                # For still-unreadable OCR quantity glyphs, use independent
+                # original-PDF-pixel Tesseract reading with strict corroboration.
+                from .quantity_reocr import recover_quantities
+                recover_quantities(d, pdf, seg_pages)
+                from .missing_quantity_reocr import recover_missing_quantities
+                recover_missing_quantities(d, pdf, seg_pages)
+                # Repair only missing/extraneous word boundaries in a
+                # source-observed medical service label. Preserve raw OCR,
+                # evidence linkage, financial fields and all review alerts.
+                from .service_spacing import repair_document_service_names
+                repair_document_service_names(d)
                 if seg.confidence < 0.35 or seg.type == "unknown":
                     d["warnings"].append({"id": f"{doc_id}-wc", "kind": "low_classification_confidence", "severity": "warning",
                                           "message": f"نوع المستند غير مؤكد ({seg.type}, {seg.confidence}) / document type uncertain"})
@@ -79,6 +99,11 @@ def process_job(store: Store, job_id: str, ocr_mode="auto", lang=None):
                      "laboratory_tests": [], "imaging": [], "procedures": [], "hospitalization": {}, "evidence": [],
                      "warnings": [{"id": f"{doc_id}-wf", "kind": "extraction_failed", "severity": "error", "message": f"{type(e).__name__}: {e}"}],
                      "requires_human_review": []}
+            # Keep all safety review requirements intact; expose a separate
+            # prioritized worklist so source-geometry warnings do not masquerade
+            # as transcription/financial errors.
+            from .review_triage import triage_document
+            d["review_triage"] = triage_document(d)
             docs.append(d)
         failed_pages = [p.number for p in pages if any(w["kind"] == "page_failed" for w in p.warnings)]
         result = {
