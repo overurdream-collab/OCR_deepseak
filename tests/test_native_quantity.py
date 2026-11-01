@@ -66,6 +66,22 @@ class NativeQuantityLogicTests(unittest.TestCase):
         words[1]=native("3",.47,.27)
         self.assertIsNone(_one_printed_qty(words,n,u,t,Decimal("59.25"),Decimal("177.75")))
 
+    def test_wide_printed_service_to_price_corridor(self):
+        # Real en_compact_12 Creatinine Test: the gap is .45667,
+        # just beyond the old arbitrary .45 limit. Digit is source-read.
+        words,n,u,t=self.candidate()
+        n[0],n[2]=.07336,.19105
+        u[0],u[2]=.64772,.69528
+        words[2]=native("59.25",.6715)
+        candidate=_one_printed_qty(words,n,u,t,Decimal("59.25"),Decimal("177.75"))
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate[0],3)
+
+    def test_arithmetic_cannot_choose_between_two_printed_digits(self):
+        words,n,u,t=self.candidate()
+        words.append(native("2",.51))
+        self.assertIsNone(_one_printed_qty(words,n,u,t,Decimal("59.25"),Decimal("177.75")))
+
     def test_misaligned_or_overlapping_row_rejected(self):
         words,n,u,t=self.candidate()
         t[1],t[3]=.38,.42

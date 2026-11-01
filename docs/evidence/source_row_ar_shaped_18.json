@@ -1,0 +1,376 @@
+{
+  "scope": "one synthetic source-PDF paired probe; not full release acceptance",
+  "baseline_commit": "5fbf98f51a2ac0b1df5f609a18743849faa6fe5a",
+  "baseline": {
+    "case": "ar_shaped_18",
+    "layout": "ar_shaped",
+    "representation": "text",
+    "pages": 1,
+    "model": "paddle_arabic",
+    "status": "completed_with_review",
+    "actual_type": "hospital_invoice",
+    "matched": 19,
+    "with_evidence": 19,
+    "total": 23,
+    "matched_item_names": 4,
+    "expected_item_rows": 5,
+    "extracted_item_rows": 4,
+    "extra_item_rows": 0,
+    "page_failures": [],
+    "real_paddle_detected": true,
+    "review_required": true,
+    "checks": [
+      {
+        "field": "patient.name",
+        "expected": "فاطمة أحمد",
+        "actual": "فاطمة أحمد",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "invoice.number",
+        "expected": "INV-710318",
+        "actual": "INV-710318",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "invoice.total",
+        "expected": 1622.75,
+        "actual": 1622.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.name",
+        "expected": "تخطيط قلب",
+        "actual": "تخطيط قلب",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.qty",
+        "expected": 3,
+        "actual": 3.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.price",
+        "expected": 59.25,
+        "actual": 59.25,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.total",
+        "expected": 177.75,
+        "actual": 177.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.name",
+        "expected": "كشف استشاري",
+        "actual": "كشف استشاري",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.qty",
+        "expected": 3,
+        "actual": 3.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.price",
+        "expected": 216.25,
+        "actual": 216.25,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.total",
+        "expected": 648.75,
+        "actual": 648.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.name",
+        "expected": "تحليل دم شامل",
+        "actual": "تحليل دم شامل",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.qty",
+        "expected": 4,
+        "actual": 4.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.price",
+        "expected": 97.0,
+        "actual": 97.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.total",
+        "expected": 388.0,
+        "actual": 388.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.name",
+        "expected": "أقراص باراسيتامول",
+        "actual": "أقراص باراسيتامول",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.qty",
+        "expected": 1,
+        "actual": 1.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.price",
+        "expected": 240.75,
+        "actual": 240.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.total",
+        "expected": 240.75,
+        "actual": 240.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.5.name",
+        "expected": "أجرة غرفة",
+        "actual": null,
+        "matched": false,
+        "linked_evidence": false
+      },
+      {
+        "field": "item.5.qty",
+        "expected": 1,
+        "actual": null,
+        "matched": false,
+        "linked_evidence": false
+      },
+      {
+        "field": "item.5.price",
+        "expected": 182.5,
+        "actual": null,
+        "matched": false,
+        "linked_evidence": false
+      },
+      {
+        "field": "item.5.total",
+        "expected": 182.5,
+        "actual": null,
+        "matched": false,
+        "linked_evidence": false
+      }
+    ],
+    "source_pdf_sha256": "1199ddc8539a56a55b34959d99dcf96fb193fcc3706d979006c407b65e693193",
+    "ocr_cache_sha256": "e24300ba08762eb38a7e9c7207139ec2010650e410b168b5ea9b7fd1c46c9a70"
+  },
+  "candidate": {
+    "case": "ar_shaped_18",
+    "layout": "ar_shaped",
+    "representation": "text",
+    "pages": 1,
+    "model": "paddle_arabic",
+    "status": "completed_with_review",
+    "actual_type": "hospital_invoice",
+    "matched": 23,
+    "with_evidence": 23,
+    "total": 23,
+    "matched_item_names": 5,
+    "expected_item_rows": 5,
+    "extracted_item_rows": 5,
+    "extra_item_rows": 0,
+    "page_failures": [],
+    "real_paddle_detected": true,
+    "review_required": true,
+    "checks": [
+      {
+        "field": "patient.name",
+        "expected": "فاطمة أحمد",
+        "actual": "فاطمة أحمد",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "invoice.number",
+        "expected": "INV-710318",
+        "actual": "INV-710318",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "invoice.total",
+        "expected": 1622.75,
+        "actual": 1622.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.name",
+        "expected": "تخطيط قلب",
+        "actual": "تخطيط قلب",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.qty",
+        "expected": 3,
+        "actual": 3.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.price",
+        "expected": 59.25,
+        "actual": 59.25,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.1.total",
+        "expected": 177.75,
+        "actual": 177.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.name",
+        "expected": "كشف استشاري",
+        "actual": "كشف استشاري",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.qty",
+        "expected": 3,
+        "actual": 3.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.price",
+        "expected": 216.25,
+        "actual": 216.25,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.2.total",
+        "expected": 648.75,
+        "actual": 648.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.name",
+        "expected": "تحليل دم شامل",
+        "actual": "تحليل دم شامل",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.qty",
+        "expected": 4,
+        "actual": 4.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.price",
+        "expected": 97.0,
+        "actual": 97.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.3.total",
+        "expected": 388.0,
+        "actual": 388.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.name",
+        "expected": "أقراص باراسيتامول",
+        "actual": "أقراص باراسيتامول",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.qty",
+        "expected": 1,
+        "actual": 1.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.price",
+        "expected": 240.75,
+        "actual": 240.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.4.total",
+        "expected": 240.75,
+        "actual": 240.75,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.5.name",
+        "expected": "أجرة غرفة",
+        "actual": "أجرة غرفة",
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.5.qty",
+        "expected": 1,
+        "actual": 1.0,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.5.price",
+        "expected": 182.5,
+        "actual": 182.5,
+        "matched": true,
+        "linked_evidence": true
+      },
+      {
+        "field": "item.5.total",
+        "expected": 182.5,
+        "actual": 182.5,
+        "matched": true,
+        "linked_evidence": true
+      }
+    ],
+    "source_pdf_sha256": "1199ddc8539a56a55b34959d99dcf96fb193fcc3706d979006c407b65e693193",
+    "ocr_cache_sha256": "e24300ba08762eb38a7e9c7207139ec2010650e410b168b5ea9b7fd1c46c9a70",
+    "printed_discrepancy": false,
+    "ocr_enhancement": false,
+    "arithmetic_warnings": []
+  },
+  "new_ocr_calls_for_candidate": 0
+}

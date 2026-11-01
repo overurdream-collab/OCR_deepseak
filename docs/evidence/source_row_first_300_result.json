@@ -1,0 +1,178 @@
+{
+  "commit": "86749efa8a43d6b0214d954c1881af4fd9570f55",
+  "run_id": 40902985455,
+  "baseline_run": 40796149371,
+  "baseline_correct": 5510,
+  "candidate_correct": 5545,
+  "gained": [
+    [
+      "en_compact_12",
+      "item.3.qty"
+    ],
+    [
+      "en_compact_54",
+      "item.1.qty"
+    ],
+    [
+      "ar_shaped_10",
+      "item.4.qty"
+    ],
+    [
+      "ar_shaped_40",
+      "item.3.qty"
+    ],
+    [
+      "ar_shaped_40",
+      "item.4.qty"
+    ],
+    [
+      "ar_mixed_24",
+      "item.1.qty"
+    ],
+    [
+      "ar_mixed_36",
+      "item.1.qty"
+    ],
+    [
+      "ar_mixed_36",
+      "item.5.qty"
+    ],
+    [
+      "ar_mixed_54",
+      "item.4.qty"
+    ],
+    [
+      "en_standard_29",
+      "item.6.qty"
+    ],
+    [
+      "en_reordered_51",
+      "item.2.qty"
+    ],
+    [
+      "en_compact_25",
+      "item.5.qty"
+    ],
+    [
+      "ar_shaped_12",
+      "item.1.qty"
+    ],
+    [
+      "ar_shaped_12",
+      "item.2.qty"
+    ],
+    [
+      "ar_shaped_12",
+      "item.3.qty"
+    ],
+    [
+      "ar_shaped_12",
+      "item.4.qty"
+    ],
+    [
+      "ar_shaped_12",
+      "item.5.qty"
+    ],
+    [
+      "ar_shaped_36",
+      "item.2.qty"
+    ],
+    [
+      "ar_shaped_42",
+      "item.1.qty"
+    ],
+    [
+      "ar_shaped_42",
+      "item.3.qty"
+    ],
+    [
+      "ar_shaped_54",
+      "item.4.qty"
+    ],
+    [
+      "en_standard_37",
+      "item.5.qty"
+    ],
+    [
+      "en_reordered_41",
+      "item.1.qty"
+    ],
+    [
+      "en_reordered_47",
+      "item.2.qty"
+    ],
+    [
+      "en_reordered_59",
+      "item.4.qty"
+    ],
+    [
+      "en_reordered_59",
+      "item.6.qty"
+    ],
+    [
+      "en_compact_27",
+      "item.2.qty"
+    ],
+    [
+      "en_compact_51",
+      "item.2.qty"
+    ],
+    [
+      "ar_visual_41",
+      "item.3.qty"
+    ],
+    [
+      "ar_visual_12",
+      "item.2.qty"
+    ],
+    [
+      "ar_visual_36",
+      "item.2.qty"
+    ],
+    [
+      "ar_visual_36",
+      "item.3.qty"
+    ],
+    [
+      "en_compact_17",
+      "item.2.qty"
+    ],
+    [
+      "en_compact_23",
+      "item.4.qty"
+    ],
+    [
+      "en_compact_29",
+      "item.2.qty"
+    ]
+  ],
+  "lost": [],
+  "new_extra_rows": [],
+  "absolute_gate": {
+    "status": "BLOCKED",
+    "documents": 300,
+    "correct": 5545,
+    "expected": 5776,
+    "errors_or_missing": 231,
+    "spurious_rows": 11,
+    "human_referral_documents": 300,
+    "evidence_gaps": 0,
+    "failed_pages": 0,
+    "missing_by_field": {
+      "invoice.total": 11,
+      "name": 12,
+      "patient.name": 28,
+      "price": 12,
+      "qty": 85,
+      "total": 12
+    },
+    "incorrect_by_field": {
+      "invoice.number": 4,
+      "patient.name": 14,
+      "price": 29,
+      "qty": 6,
+      "total": 18
+    },
+    "acceptance": "5776/5776 exact with linked evidence, zero missing/wrong, zero extra rows, zero referrals"
+  }
+}

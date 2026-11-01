@@ -29,6 +29,12 @@ def _digits(text):
     return value if 1 <= value <= 99 else None
 
 
+def _numeric_ocr_trigger(raw):
+    token = fix_digits(str(raw or "").strip())
+    return bool(re.fullmatch(r"[A-Za-z0-9]{1,3}", token)
+                and any(c.isdigit() for c in token))
+
+
 def numeric_reocr_crop(pdf_path, page_no, source_box):
     """Return independent OCR attempts on exact original PDF pixels.
 
@@ -55,7 +61,10 @@ def numeric_reocr_crop(pdf_path, page_no, source_box):
     img=page.render(scale=config.OCR_DPI/72).to_pil().convert("RGB")
     W,H=img.size
     px=max(.005,(x1-x0)*.55)
-    py=max(.003,(y1-y0)*.60)
+    # A text-line box already spans the numeral height. The former 60%
+    # vertical padding captured digits from adjacent invoice rows, causing
+    # contradictory reads of a perfectly clear source glyph.
+    py=min(.002,max(.0005,(y1-y0)*.12))
     a,b,c,d=(max(0,int((x0-px)*W)), max(0,int((y0-py)*H)),
              min(W,int((x1+px)*W)), min(H,int((y1+py)*H)))
     if c-a<8 or d-b<8:return []
@@ -107,7 +116,7 @@ def choose_digit(reads, price, total, orig_token="M"):
     Two separate preprocessing passes must independently recognize the same
     numeral in original pixels. Arithmetic is only a corroborating guard.
     """
-    if orig_token not in ELIGIBLE_OCR_GLYPHS:
+    if orig_token is not None and orig_token not in ELIGIBLE_OCR_GLYPHS and not _numeric_ocr_trigger(orig_token):
         return None
     try:
         price=Decimal(str(price))
@@ -156,7 +165,11 @@ def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
     evidence={e["id"]:e for e in doc.get("evidence",[]) if e.get("id")}
     for item in doc.get("invoice_items",[]):
         qty=item.get("quantity",{})
-        if qty.get("raw") not in ELIGIBLE_OCR_GLYPHS or qty.get("status")!="unreadable":
+        unreadable = (qty.get("raw") in ELIGIBLE_OCR_GLYPHS
+                      and qty.get("status") == "unreadable")
+        numeric_conflict = (_numeric_ocr_trigger(qty.get("raw"))
+                            and qty.get("status") == "extracted")
+        if not (unreadable or numeric_conflict):
             continue
         page_no=qty.get("page")
         source_page=by_page.get(page_no)
@@ -175,6 +188,15 @@ def recover_quantities(doc, pdf_path, pages, reader=numeric_reocr_crop):
             p.get("page")!=page_no or t.get("page")!=page_no or
             not p.get("evidence_id") or not t.get("evidence_id")):
             continue
+        if numeric_conflict:
+            try:
+                qv, pv, tv = (Decimal(str(v)) for v in
+                              (qty.get("value"), p.get("value"), t.get("value")))
+                if (not all(v.is_finite() for v in (qv, pv, tv))
+                        or pv <= 0 or tv <= 0 or (qv * pv == tv and qty.get("confidence",1.) >= .70)):
+                    continue
+            except (InvalidOperation, ValueError, TypeError):
+                continue
         source_box=original_evidence.get("bbox")
         if not isinstance(source_box,(list,tuple)):
             continue

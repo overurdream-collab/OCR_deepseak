@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install lightweight PDF/test dependencies
+        run: python -m pip install -r requirements.txt
       - name: Verify fields, review safeguards and candidate geometry
         run: |
           python -m unittest tests.test_arabic_missing_rows tests.test_arabic_ambiguous_rows tests.test_quantity_reocr -v
@@ -69,7 +71,7 @@ jobs:
           if-no-files-found: error
   strict-comparison:
     needs: full-real-ocr
-    if: always()
+    if: ${{ needs.full-real-ocr.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

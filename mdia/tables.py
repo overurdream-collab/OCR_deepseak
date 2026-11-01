@@ -368,8 +368,17 @@ def unheaded_arabic_invoice_rows(page: Page) -> Optional[Table]:
                 # or characters merely guessed from mathematical totals.
                 from .quantity_reocr import ELIGIBLE_OCR_GLYPHS
                 observed_ambiguous = ELIGIBLE_OCR_GLYPHS & {"M", "H", "w", "R", "I"}
-                unreadable = [w for w in ln.words if w.text in observed_ambiguous
-                              and w.conf >= .65 and abs(w.cx - anchors["qty"]) <= .025]
+                # A low-confidence literal quantity must not discard an
+                # otherwise fully observed charge row. Two established rows
+                # still own the columns; only a literal 1..99 source token
+                # or the previously supported OCR glyph may occupy qty.
+                def candidate_qty(w):
+                    literal = (bool(re.fullmatch(r"[1-9٠-٩][0-9٠-٩]?", w.text))
+                               and parse_number(w.text) > 0)
+                    return ((w.text in observed_ambiguous and w.conf >= .65)
+                            or (literal and .40 <= w.conf < .65))
+                unreadable = [w for w in ln.words if candidate_qty(w)
+                              and abs(w.cx - anchors["qty"]) <= .025]
                 if len(unreadable) != 1:
                     continue
                 numbers = sorted(
