@@ -8,11 +8,14 @@ from typing import Dict, List, Optional
 
 from . import config
 from .kv import KV, line_pairs, page_pairs
+from .invoice_identifier import observed_invoice_id, independently_confirmed_invoice_id
+from .total_candidates import is_isolated_total
 from .lexicon import INJECTION_PATTERNS
 from .model import Page, Word, join_words, logical_order, union_bbox
 from .tables import Table, find_tables, header_columns, unheaded_arabic_invoice_rows
 from .textutil import (CUR_TOKEN_RE, ar_ratio, detect_currency, has_ar, last_amount, match_key, parse_date,
-                       parse_number)
+                       parse_number, ocr_arabic_comma_decimal, normalize_arabic_ocr_script, uncertain_arabic_ocr_letters,
+                       has_ambiguous_final_farsi_yeh)
 
 ICD_RE = re.compile(r"\b([A-TV-Z][0-9]{2}(?:\.[0-9A-Z]{1,4})?)\b")
 STRENGTH_RE = re.compile(r"(?i)(\d+(?:[.,]\d+)?)\s*(mg|mcg|µg|g|ml|iu|units?|%|mmol|ملغ|ملجم|مجم|مل|ميكروغرام|وحده)(?!\s*/\s*dl)\b(?:\s*/\s*(\d+(?:[.,]\d+)?)?\s*(ml|mg|g|مل))?")
@@ -106,16 +109,24 @@ class Ctx:
         value, status, reasons = raw_text, "extracted", []
         ev_words = words
         if kind == "money":
-            tok, num = last_amount(raw_text)
+            tok, num = last_amount(raw_text, allow_ocr_arabic_comma=page.method == "ocr")
             if num is not None:
                 raw_text = tok.strip(":؛;")
                 value = float(num)
                 ev_words = [w for w in words if w.text.strip(":؛;") == raw_text] or words
+                if page.method == "ocr" and ocr_arabic_comma_decimal(raw_text) is not None:
+                    # OCR may confuse the Arabic punctuation comma with an
+                    # actual printed decimal separator. A candidate, NOT a
+                    # verified monetary amount; retain evidence and review.
+                    reasons.append("ocr_arabic_comma_decimal_candidate")
             else:
                 value, status = None, "unreadable"
                 reasons.append("unparseable_number")
         elif kind == "number":
-            num = parse_number(raw_text)
+            num = (ocr_arabic_comma_decimal(raw_text) if page.method == "ocr"
+                   else None) if "،" in raw_text else parse_number(raw_text)
+            if num is not None and "،" in raw_text:
+                reasons.append("ocr_arabic_comma_decimal_candidate")
             if num is None:
                 value, status = None, "unreadable"
                 reasons.append("unparseable_number")
@@ -127,6 +138,21 @@ class Ctx:
             if iso is None:
                 status = "unreadable" if n in ("no_date_found", "invalid_date") else "ambiguous"
                 reasons.append(n)
+        elif kind == "text" and page.method == "ocr":
+            # Paddle Arabic recognition may emit Persian yeh/kaf codepoints.
+            # A final/isolated Farsi yeh can be Arabic ي OR ى; never decide
+            # from that glyph alone (e.g. kidney term كلى vs adjective كلي).
+            # Always preserve source evidence and never rewrite financial data.
+            normalized = normalize_arabic_ocr_script(raw_text)
+            if normalized != raw_text:
+                value = normalized
+                reasons.append("arabic_ocr_script_variant")
+            if has_ambiguous_final_farsi_yeh(raw_text):
+                reasons.append("ambiguous_final_farsi_yeh")
+            if uncertain_arabic_ocr_letters(raw_text):
+                # An Urdu/Persian letter is NOT proof of its visually similar
+                # Arabic counterpart. Keep it verbatim and require a reviewer.
+                reasons.append("ocr_extended_arabic_letter")
         m = mult
         if page.flags.get("arabic_visual_order_fixed") and has_ar(raw_text):
             m *= 0.92
@@ -137,7 +163,11 @@ class Ctx:
         conf = next(e["confidence"] for e in self.evidence if e["id"] == eid)
         if status != "extracted":
             conf = round(conf * 0.5, 3)
-        verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted") else "unverified"
+        verification = "needs_review" if (conf < config.LOW_CONF or status != "extracted"
+                                          or "arabic_ocr_script_variant" in reasons
+                                          or "ambiguous_final_farsi_yeh" in reasons
+                                          or "ocr_extended_arabic_letter" in reasons
+                                          or "ocr_arabic_comma_decimal_candidate" in reasons) else "unverified"
         f = {"raw": raw_text, "value": value, "evidence_id": eid, "page": page.number, "confidence": conf,
              "status": status, "verification": verification}
         if reasons:
@@ -347,13 +377,41 @@ class Extractor:
             "service_date": self._single({"invoice.service_date"}, kind="date"),
             "currency": self._currency(),
         }
+        current_id = fields["invoice_number"]
+        # Check the actual printed header token even if the original parser
+        # returned a seemingly extracted ID with a separate stray OCR digit.
+        # Never strip a suffix unless the identical complete invoice ID is
+        # independently visible as an original-page OCR word.
+        printed_id = observed_invoice_id([self.pages[n] for n in self.order])
+        if printed_id is not None and (
+            current_id["status"] == "not_found"
+            or independently_confirmed_invoice_id(current_id.get("raw"), printed_id[3])
+        ):
+            page, line, word, identifier = printed_id
+            field = self.ctx.field(
+                page, [word], raw=identifier, source=line.text,
+                note="invoice_identifier_from_printed_header"
+            )
+            if current_id["status"] != "not_found":
+                field["original_ocr_raw"] = current_id.get("raw")
+                field["original_ocr_evidence_id"] = current_id.get("evidence_id")
+                field["recovery_method"] = "independent_header_id_resolves_extra_ocr_token"
+            # A substring within a larger OCR token has uncertain exact bbox;
+            # preserve the source and never misrepresent it as verified text.
+            if word.text != identifier:
+                field["verification"] = "needs_review"
+                field.setdefault("review_reasons", []).append(
+                    "invoice_identifier_embedded_in_ocr_token"
+                )
+            fields["invoice_number"] = field
         totals = {}
         for key, fid in [("subtotal", "fin.subtotal"), ("discount_total", "fin.discount"), ("tax_total", "fin.tax"),
                          ("additional_fees", "fin.fees"), ("invoice_total", "fin.total"), ("paid_total", "fin.paid"),
                          ("balance_due", "fin.balance"), ("patient_share", "fin.patient_share"), ("claimed_total", "fin.claimed")]:
             cands = []
             for no, kv in self.all_pairs({fid}):
-                if kv.value_words and last_amount(kv.value_text)[1] is not None:
+                if (kv.value_words and last_amount(kv.value_text, allow_ocr_arabic_comma=self.pages[no].method == "ocr")[1] is not None
+                        and (key != "invoice_total" or is_isolated_total(kv))):
                     cands.append(self.ctx.field(self.pages[no], kv.value_words, kind="money", source=_line_text(kv.line)))
             if not cands:
                 totals[key] = _nf()
