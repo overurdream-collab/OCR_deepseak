@@ -1,0 +1,124 @@
+name: MDIA printed invoice ID correction — real source benchmark
+on:
+  pull_request:
+    paths:
+      - 'mdia/invoice_identifier.py'
+      - 'mdia/extract.py'
+      - 'tests/test_invoice_identifier.py'
+      - 'scripts/probe_printed_invoice_ids.py'
+      - 'scripts/compare_ambiguous_rows300.py'
+      - '.github/workflows/mdia-printed-invoice-ids.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  targeted-original-pdfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Prove no guessed invoice number or zero-error gate bypass
+        run: |
+          python -m unittest tests.test_invoice_identifier tests.test_zero_error_acceptance -v
+      - name: Install free local OCR
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Re-run original synthetic PDF sources for four known ID errors
+        run: python -u -m scripts.probe_printed_invoice_ids
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-printed-id-source-probe
+          path: results/printed_invoice_id_probe.json
+          retention-days: 14
+          if-no-files-found: warn
+  full-source-300:
+    needs: targeted-original-pdfs
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install free local OCR and Arabic PDF fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr>=3.2,<4'
+      - name: Read fifty printed synthetic PDF invoices
+        run: |
+          python -u -m scripts.benchmark_invoice300 --shard ${{ matrix.shard }} --shards 6 \
+            --engines paddle_arabic --output-dir results/printed_id_shard${{ matrix.shard }}
+      - name: Real-Paddle source completeness
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(next(Path("results").glob("printed_id_shard*/results.json")).read_text("utf-8"))
+          assert r["status"]=="completed_real_ocr" and len(r["results"])==50
+          assert not r["failure_records"]
+          assert all(x["real_paddle_detected"] for x in r["results"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-printed-id-shard${{ matrix.shard }}
+          path: results/printed_id_shard${{ matrix.shard }}/results.json
+          retention-days: 7
+          if-no-files-found: error
+  nonregression-and-absolute-quality:
+    needs: full-source-300
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-printed-id-shard*
+          path: candidate
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: 40786930681
+          github-token: ${{ github.token }}
+          pattern: mdia-spacing-shard*
+          path: baseline
+      - name: Strict fieldwise accuracy non-regression against 95.29%
+        run: |
+          python -m scripts.compare_ambiguous_rows300 \
+            --previous baseline/*/results.json \
+            --current candidate/*/results.json \
+            --output results/printed_invoice_id_comparison.json
+      - name: Report absolute-zero-error status without hiding failures
+        if: always()
+        run: |
+          python -m scripts.check_zero_error300 candidate/*/results.json \
+            --output results/absolute_zero_errors_diagnostic.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-printed-invoice-300-proof
+          path: results/*.json
+          retention-days: 14
+          if-no-files-found: warn
