@@ -16,6 +16,58 @@ def nfkc(s: str) -> str:
     return unicodedata.normalize("NFKC", s)
 
 
+_ARABIC_OCR_KAF_EQUIVALENT = str.maketrans({"ک": "ك"})
+_BASIC_ARABIC_LETTERS = frozenset("ءآأؤإئابتثجحخدذرزسشصضطظعغفقكلمنهويىة")
+_REVIEWED_EQUIVALENTS = frozenset("کی")
+
+
+def _farsi_yeh_joins_next(s: str, i: int) -> bool:
+    """Only infer an Arabic yeh from a joining initial/medial Farsi glyph.
+
+    U+06CC Farsi yeh visually matches U+064A Arabic yeh in joining forms,
+    but U+0649 alef maqsura in final/isolated forms (Unicode chapter 9).
+    Skip diacritics within the token; whitespace, punctuation and zero-width
+    non-joiners are boundaries.  Keep unclear shapes untouched for review.
+    """
+    for ch in s[i + 1:]:
+        if unicodedata.category(ch).startswith("M") or ch == "\u0640":
+            continue
+        return ch != "ء" and ch in _BASIC_ARABIC_LETTERS | _REVIEWED_EQUIVALENTS
+    return False
+
+
+def has_ambiguous_final_farsi_yeh(s: str) -> bool:
+    """Whether U+06CC could be Arabic ي or ى based on the source glyph."""
+    return any(ch == "ی" and not _farsi_yeh_joins_next(s, i)
+               for i, ch in enumerate(s))
+
+
+def normalize_arabic_ocr_script(s: str) -> str:
+    """Conservatively normalize OCR-confused Persian kaf/medial yeh glyphs.
+
+    The original OCR text must remain available as `field.raw` and evidence;
+    this only normalizes a separate text `value`, with mandatory human review.
+    Never guess whether a final/isolated Farsi yeh means Arabic ي or ى:
+    that can change a medical word such as كلى (kidneys) into كلي.
+    Other Persian/Urdu characters that change meaning are never rewritten.
+    """
+    return "".join("ي" if ch == "ی" and _farsi_yeh_joins_next(s, i) else
+                   ch.translate(_ARABIC_OCR_KAF_EQUIVALENT)
+                   for i, ch in enumerate(s))
+
+
+def uncertain_arabic_ocr_letters(s: str) -> list:
+    """Flag extended Arabic-script OCR letters; do not transliterate them.
+
+    Urdu/Persian letters such as peh, gaf, heh goal and yeh barree may be
+    legitimate names or different sounds. Never replace them with Arabic
+    lookalikes as if they were proved equivalent to a source glyph.
+    """
+    return sorted({ch for ch in s if ch not in _BASIC_ARABIC_LETTERS
+                   and ch not in _REVIEWED_EQUIVALENTS
+                   and unicodedata.name(ch, "").startswith("ARABIC LETTER ")})
+
+
 def fix_digits(s: str) -> str:
     return s.translate(_DIGITS)
 
@@ -80,10 +132,24 @@ def detect_currency(s: str):
     return raw, _CUR.get(k)
 
 
+def ocr_arabic_comma_decimal(s):
+    """Tentative numeric OCR interpretation of an explicit Arabic comma glyph.
+
+    U+060C is punctuation, not a decimal sign. Some OCR outputs confuse it
+    with U+066B. Only a complete positive numeric token with exactly two
+    post-comma digits qualifies, and ONLY for mandatory human review.
+    Never infer a separator from plain digits or a prose/grouped amount.
+    """
+    t = fix_digits(nfkc(str(s or ""))).strip()
+    m = re.fullmatch(r"(\d{1,7})،(\d{2})", t)
+    return Decimal(m.group(1) + "." + m.group(2)) if m else None
+
+
 def is_numeric_token(t: str) -> bool:
+    if ocr_arabic_comma_decimal(t) is not None:
+        return True
     t = fix_digits(nfkc(t)).strip(_STRIP + " ")
     return bool(re.fullmatch(r"[-+]?\d[\d,.\u066B\u066C]*%?", t)) or t == "-"
-
 
 def parse_number(s):
     """Decimal or None. Ambiguity stays explicit: unparseable -> None."""
@@ -110,13 +176,23 @@ def parse_number(s):
     return -d if neg else d
 
 
-def last_amount(s: str):
-    """(raw_token, Decimal) of the last numeric token that is not a percentage, else (None, None)."""
+def last_amount(s: str, allow_ocr_arabic_comma=False):
+    """Last observed numeric token; ambiguous punctuation is not discarded.
+
+    OCR-only U+060C handling MUST be accompanied by a human-review flag.
+    The source token is returned verbatim, never rewritten.
+    """
     toks = fix_digits(nfkc(s)).split()
     for tok in reversed(toks):
         if "%" in tok or not re.search(r"\d", tok):
             continue
-        clean = tok.strip("[]:؛;")                      # keep parentheses: "(20.00)" is a NEGATIVE amount
+        clean = tok.strip("[]:؛;")  # parentheses remain for negative amounts
+        if "،" in clean:
+            if allow_ocr_arabic_comma:
+                v = ocr_arabic_comma_decimal(clean)
+                if v is not None:
+                    return tok, v
+            continue
         if re.fullmatch(r"[-+]?\(?\d[\d,.\u066B\u066C]*\)?", clean):
             v = parse_number(clean)
             if v is not None:

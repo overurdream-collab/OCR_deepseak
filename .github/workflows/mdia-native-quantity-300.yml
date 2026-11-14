@@ -1,0 +1,92 @@
+name: MDIA source row repair - paired 300 and absolute gate
+on:
+  pull_request:
+    paths:
+      - 'mdia/native_quantity.py'
+      - 'mdia/quantity_reocr.py'
+      - 'mdia/missing_quantity_reocr.py'
+      - 'mdia/tables.py'
+      - 'mdia/extract.py'
+      - 'mdia/invoice_identifier.py'
+      - 'scripts/compare_native_gap300.py'
+      - 'scripts/summarize_source_row_repair300.py'
+      - '.github/workflows/mdia-native-quantity-300.yml'
+  workflow_dispatch:
+concurrency:
+  group: mdia-source-row-repair-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  paired-source-pdfs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
+    env:
+      OMP_NUM_THREADS: '1'
+      PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+      MDIA_EVIDENCE_RECONCILIATION: '1'
+      # Preserve the previously measured reference OCR configuration.
+      # Enhancement/alignment must be evaluated in isolated A/B runs, not in this gate.
+      MDIA_PADDLE_WORD_ALIGN: '0'
+      MDIA_OCR_IMAGE_ENHANCE: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install real local engines and Arabic fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng fonts-dejavu-core fonts-hosny-amiri
+          python -m pip install -r requirements.txt
+          python -m pip install 'paddlepaddle==3.2.0' 'paddleocr==3.7.0' 'paddlex==3.7.2'
+      - name: Source, ambiguity and absolute-gate regressions
+        run: python -m unittest tests.test_native_quantity tests.test_quantity_reocr tests.test_missing_quantity_reocr tests.test_arabic_ambiguous_rows tests.test_arabic_unheaded_fragments tests.test_invoice_identifier tests.test_source_row_summary tests.test_zero_error_acceptance -v
+      - name: Same original PDFs and cached real OCR - baseline and candidate
+        run: python -u -m scripts.compare_native_gap300 --shard ${{ matrix.shard }} --shards 6 --output results/shard${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-ocr-cache-shard${{ matrix.shard }}
+          path: results/shard${{ matrix.shard }}/ocr_cache/
+          compression-level: 9
+          retention-days: 14
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-source-row-pair${{ matrix.shard }}
+          path: |
+            results/shard${{ matrix.shard }}/baseline/results.json
+            results/shard${{ matrix.shard }}/candidate/results.json
+            results/shard${{ matrix.shard }}/case_proofs/*.json
+          retention-days: 14
+  absolute-acceptance:
+    needs: paired-source-pdfs
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mdia-source-row-pair*
+          path: paired
+      - name: Require 5776 exact fields, zero missing/wrong/extra rows/referrals
+        run: |
+          python -m scripts.summarize_source_row_repair300 \
+            --baseline paired/*/baseline/results.json \
+            --candidate paired/*/candidate/results.json \
+            --output results/source-row-full-proof.json --require-perfect
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mdia-source-row-absolute-proof
+          path: results/source-row-full-proof.json
+          retention-days: 14
