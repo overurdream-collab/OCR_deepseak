@@ -165,6 +165,22 @@ class AuditTests(unittest.TestCase):
         self.grn["po_reference"]["verification"] = "provisional"
         self.check(UNVERIFIABLE)
 
+    def test_po_line_missing_from_both_documents_is_not_match(self):
+        second = copy.deepcopy(self.po["lines"][0])
+        second["sku"]["value"] = "SKU-SECOND"
+        self.po["lines"].append(second)
+        result = self.check(EXCEPTION)
+        self.assertIn("ORDERED_NOT_RECEIVED", {f["rule"] for f in result["findings"]})
+        self.assertIn("ORDERED_NOT_INVOICED", {f["rule"] for f in result["findings"]})
+
+    def test_exponent_numeric_rejected(self):
+        self.inv["lines"][0]["quantity"]["value"] = "1e1000000"
+        self.check(UNVERIFIABLE)
+
+    def test_excessive_decimal_precision_rejected(self):
+        self.po["lines"][0]["unit_price"]["value"] = "0.123456789"
+        self.check(UNVERIFIABLE)
+
     def test_no_rounded_float(self):
         self.po["lines"][0]["unit_price"]["value"] = "0.10"
         self.inv["lines"][0]["unit_price"]["value"] = "0.10"
