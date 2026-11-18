@@ -1,0 +1,59 @@
+{
+  "schema_version": "public-document-benchmark-1",
+  "sources": [
+    {
+      "id": "sroie",
+      "title": "ICDAR2019 SROIE, maintained copy by jsdnrs",
+      "homepage": "https://huggingface.co/datasets/jsdnrs/ICDAR2019-SROIE",
+      "api_dataset": "jsdnrs/ICDAR2019-SROIE",
+      "type": "real_receipt_images_with_key_fields",
+      "count_reported": 987,
+      "license_reported": "CC-BY-4.0",
+      "license_verified_from": "https://huggingface.co/datasets/jsdnrs/ICDAR2019-SROIE",
+      "purpose": "ocr and key field extraction only; NOT linked PO/GRN audit",
+      "evaluation_fields": ["company", "date", "address", "total"],
+      "training_restriction": "Only use test split; log any missing split/rows rather than substitute training rows",
+      "status": "candidate_requires_runtime_download"
+    },
+    {
+      "id": "zenodo-6371710",
+      "title": "Dataset of invoices and receipts including annotation of relevant fields",
+      "homepage": "https://zenodo.org/records/6371710",
+      "type": "real_invoice_and_receipt_images",
+      "count_reported": 813,
+      "size_reported_bytes": 410500000,
+      "annotations_url": "https://zenodo.org/records/6371710/files/2_Annotations_Json.zip?download=1",
+      "purpose": "invoice/receipt field OCR evaluation, subject to legal/privacy review",
+      "license_reported": "NOT VERIFIED",
+      "status": "candidate_license_review_required"
+    },
+    {
+      "id": "docile",
+      "title": "DocILE",
+      "homepage": "https://docile.rossum.ai/",
+      "type": "business_invoice_and_order_documents",
+      "annotated_reported": 6680,
+      "access": "research application required",
+      "purpose": "key information localization and line item recognition",
+      "status": "access_and_terms_review_required"
+    },
+    {
+      "id": "inv-cdip",
+      "title": "Salesforce INV-CDIP",
+      "homepage": "https://github.com/salesforce/inv-cdip",
+      "type": "real_invoice_field_extraction",
+      "annotated_reported": 350,
+      "license_reported": "CC-BY-NC-4.0",
+      "purpose": "noncommercial research/evaluation only subject to license",
+      "status": "noncommercial_restriction"
+    }
+  ],
+  "policy": {
+    "raw_documents_in_git": false,
+    "real_financial_truth_inferred_from_labels": false,
+    "real_three_way_matching_proven": false,
+    "business_document_supplier_authenticity_proven": false,
+    "holdout_results_must_report_source_count_and_field_count": true,
+    "no_autopayment": true
+  }
+}
