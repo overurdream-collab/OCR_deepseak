@@ -46,3 +46,13 @@ The MDIA bridge checks the original PDF bytes against the MDIA report hash, comp
 `invoice_audit.attestation.audit_attested_sources(...)` adds role-scoped HMAC verification of PO, receipt and invoice bytes using independently provisioned secrets. This proves integrity against holders of the provisioned keys **only**. It is not PKI, an official tax e-invoice signature, physical stock receipt proof, approval or an ERP integration. Do not use passwords as signing keys or expose signing secrets to document uploaders.
 
 Operational policy: **No invoice may be paid on the basis of this tool**. Operators must separately verify supplier identity, receipt authenticity and contractual terms; full custody, access control and tested business rules are still needed.
+
+## Additional implemented adapters and controls
+
+- `invoice_audit.xlsx_adapter.audit_xlsx_templates`: validates a strict one-sheet `Audit` XLSX format. Row 1–11 labels are fixed as in `LABELS`, row 12 lists `sku, unit, quantity, unit_price, line_total`, item rows begin at 13. Only literal strings for money/quantities; formulas, unexpected fields and unsupported scopes are rejected. Cell addresses and the SHA of the original bytes are retained as evidence pointers. **Generic supplier spreadsheets are unsupported until a mapping is explicitly reviewed.**
+- `invoice_audit.mdia_bridge.prepare_mdia_review`: compares the original PDF SHA to MDIA's result and checks each field's page and text match; sends all OCR/text extractions to **review**, never payment authorization.
+- `invoice_audit.attestation.audit_attested_sources`: optional role-scoped HMAC for three *separately provisioned* parties. It does not provide legal signatures, a certificate chain, or proof of physical goods receipt.
+- `invoice_audit.registry.AuditRegistry`: standalone local SQLite replay protection for attested JSON invoices and a hash-linked audit-event log. **Not a general ledger or durable external audit anchor**. Rewriting or truncating the database remains possible for a sufficiently privileged operator; external anchoring, backup/recovery, key rotation, change control, and roles must be provided before production.
+- `invoice_audit.report.render_html`: read-only local RTL report with escaping of untrusted text; no approval button or payment action.
+
+**Critical remaining boundaries**: HMAC keys must be provisioned through trusted infrastructure independent of uploaders. No authenticated employee-review workflow, ERP ledger, tax rules, partial deliveries, multi-entity invoices, automatic OCR-to-trusted-field promotion, or real-production acceptance exists. Treat `VERIFIED_MATCH` as *internal conditional data consistency*, not proof that all physical/commercial events took place.
