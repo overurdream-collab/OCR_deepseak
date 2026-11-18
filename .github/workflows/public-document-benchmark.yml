@@ -24,6 +24,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng
           python -m pip install 'Pillow>=10,<12' 'pytesseract>=0.3.10,<1'
+      - name: Verify OCR amount metric cannot invent matches
+        run: python -m unittest tests.test_public_benchmark_metric -v
       - name: Download and evaluate 10 published test receipt images
         run: |
           python -m benchmarks.public_documents.sroie_benchmark --limit 10 --out results/sroie-10.json
