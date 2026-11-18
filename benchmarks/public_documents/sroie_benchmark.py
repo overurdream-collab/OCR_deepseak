@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import re
@@ -52,7 +53,27 @@ def read_image_from_row(image):
 
 
 def norm_amount(value):
-    return re.sub(r"[^0-9.]", "", str(value or "")).lstrip("0") or "0"
+    """Parse ONE printed money token, never concatenate the whole OCR page."""
+    token = str(value).strip().replace(" ", "")
+    if not re.fullmatch(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?", token):
+        return None
+    try:
+        return Decimal(token.replace(",", ""))
+    except InvalidOperation:
+        return None
+
+
+AMOUNT_TOKEN = re.compile(
+    r"(?<![0-9])(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)(?![0-9])"
+)
+
+
+def total_token_present(raw_text, printed_total):
+    target = norm_amount(printed_total)
+    if target is None:
+        return False
+    return any(norm_amount(token.group(0)) == target
+               for token in AMOUNT_TOKEN.finditer(raw_text))
 
 
 def split_info():
@@ -93,8 +114,7 @@ def main():
         total = entities.get("total") if isinstance(entities, dict) else None
         if not isinstance(total, (str, int, float)) or not str(total).strip():
             raise ValueError(f"row {idx}: no annotated total")
-        printed = norm_amount(total)
-        observed = bool(printed and printed in norm_amount(text))
+        observed = total_token_present(text, total)
         results.append({
             "row_idx": idx,
             "image_sha256": hashlib.sha256(original).hexdigest(),
