@@ -29,6 +29,9 @@ jobs:
       - name: Download and evaluate 30 published test receipt images
         run: |
           python -m benchmarks.public_documents.sroie_benchmark --limit 30 --out results/sroie-30.json
+      - name: Sample 5 original Portuguese invoice or receipt images
+        run: |
+          python -m benchmarks.public_documents.portuguese_sample --limit 5 --out results/portuguese-5.json
       - name: Verify coverage report and no financial authority claims
         run: |
           python - <<'PY'
@@ -39,11 +42,16 @@ jobs:
           assert r['invoice_line_accuracy'] is None
           assert r['raw_ocr_total_token_found']+r['raw_ocr_total_token_missing']==30
           print('Verified source documents:',r['count'],'OCR total token coverage:',r['raw_ocr_total_token_found'],'/',r['count'])
+          p=json.load(open('results/portuguese-5.json'))
+          assert p['count']==5 and p['field_accuracy'] is None and p['financial_approval'] is False
+          print('Portuguese real images inspected:',p['count'],'with nonempty OCR:',p['ocr_nonempty_count'])
           PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: public-sroie-holdout-report
-          path: results/sroie-30.json
+          path: |
+            results/sroie-30.json
+            results/portuguese-5.json
           if-no-files-found: warn
           retention-days: 14
