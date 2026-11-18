@@ -55,7 +55,7 @@ def read_image_from_row(image):
 def norm_amount(value):
     """Parse ONE printed money token, never concatenate the whole OCR page."""
     token = str(value).strip().replace(" ", "")
-    if not re.fullmatch(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?", token):
+    if not re.fullmatch(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?", token):
         return None
     try:
         return Decimal(token.replace(",", ""))
@@ -64,7 +64,7 @@ def norm_amount(value):
 
 
 AMOUNT_TOKEN = re.compile(
-    r"(?<![0-9])(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\\.[0-9]{1,2})?|[0-9]+(?:\\.[0-9]{1,2})?)(?![0-9])"
+    r"(?<![0-9])(?:[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?)(?![0-9])"
 )
 
 
