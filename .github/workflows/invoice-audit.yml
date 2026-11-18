@@ -1,0 +1,30 @@
+name: Invoice Audit prototype checks
+
+on:
+  pull_request:
+    paths:
+      - 'invoice_audit/**'
+      - 'tests/test_invoice_audit.py'
+      - '.github/workflows/invoice-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'invoice_audit/**'
+      - 'tests/test_invoice_audit.py'
+      - '.github/workflows/invoice-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Run isolated invoice audit tests (no OCR dependencies)
+        run: python -m unittest tests.test_invoice_audit -v
