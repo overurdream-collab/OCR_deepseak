@@ -142,6 +142,9 @@ def audit(po: dict, grn: dict, invoice: dict) -> dict:
                 "ruleset": "invoice-audit-v0.1"}
     findings = []
     calculated_total = Decimal("0")
+    for key in sorted(set(receipt["lines"]) - set(bill["lines"])):
+        findings.append({"rule": "RECEIVED_NOT_INVOICED", "sku": key[0],
+                         "message": "received item absent from invoice in declared full scope"})
     for key, line in sorted(bill["lines"].items()):
         ordered = order["lines"][key]
         received = receipt["lines"].get(key)
@@ -150,8 +153,9 @@ def audit(po: dict, grn: dict, invoice: dict) -> dict:
                              "message": "invoice item absent from receipt"})
             continue
         qty, poqty, receivedqty = line["quantity"], ordered["quantity"], received["quantity"]
-        if qty > receivedqty:
-            findings.append({"rule": "QTY_OVER_RECEIVED", "sku": line["sku"],
+        if qty != receivedqty:
+            findings.append({"rule": "QTY_OVER_RECEIVED" if qty > receivedqty
+                             else "QTY_UNDER_RECEIVED", "sku": line["sku"],
                              "difference": str(qty - receivedqty)})
         if qty > poqty:
             findings.append({"rule": "QTY_OVER_ORDERED", "sku": line["sku"],
