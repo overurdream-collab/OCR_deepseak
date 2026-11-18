@@ -108,6 +108,10 @@ def _parse(document: Any, kind: str, errors: list) -> dict | None:
             continue
         parsed[key] = {"sku": sku, "unit": unit, "quantity": quantity,
                        "unit_price": price, "line_total": total}
+    if kind in ("grn", "invoice"):
+        fields["po_reference"] = _text(document, "po_reference", errors, kind)
+    if kind == "invoice":
+        fields["grn_reference"] = _text(document, "grn_reference", errors, kind)
     fields["lines"] = parsed
     if kind == "invoice":
         fields["stated_total"] = _number(document, "stated_total", errors, kind)
@@ -128,6 +132,10 @@ def audit(po: dict, grn: dict, invoice: dict) -> dict:
                 "findings": [], "reasons": sorted(set(errors)),
                 "ruleset": "invoice-audit-v0.1"}
     order, receipt, bill = docs
+    if receipt["po_reference"] != order["document_id"] or bill["po_reference"] != order["document_id"]:
+        errors.append("purchase order reference mismatch")
+    if bill["grn_reference"] != receipt["document_id"]:
+        errors.append("goods receipt reference mismatch")
     if len({order["supplier_id"], receipt["supplier_id"], bill["supplier_id"]}) != 1:
         errors.append("supplier identity mismatch")
     if len({order["currency"], receipt["currency"], bill["currency"]}) != 1:
