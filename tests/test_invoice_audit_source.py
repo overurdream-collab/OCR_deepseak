@@ -16,8 +16,11 @@ def payload(kind, quantity="10", price="5"):
     if kind == "po":
         doc["single_po_scope"] = True
     if kind == "grn":
+        doc["po_reference"] = "po-1"
         doc["complete_receipt_scope"] = True
     if kind == "invoice":
+        doc["po_reference"] = "po-1"
+        doc["grn_reference"] = "grn-1"
         doc.update(stated_total="50", has_other_charges=False, single_invoice_scope=True)
     return doc
 
@@ -85,6 +88,14 @@ class StructuredSourcesTests(unittest.TestCase):
 
     def test_wrong_document_kind(self):
         self.invoice["kind"] = "po"
+        self.check(UNVERIFIABLE)
+
+    def test_unrelated_po_reference_rejected(self):
+        self.invoice["po_reference"] = "po-other"
+        self.check(UNVERIFIABLE)
+
+    def test_unrelated_receipt_reference_rejected(self):
+        self.invoice["grn_reference"] = "grn-other"
         self.check(UNVERIFIABLE)
 
     def test_hash_binds_source_content(self):
