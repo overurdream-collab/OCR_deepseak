@@ -22,6 +22,10 @@ def doc(kind, qty="10", price="5", total=None):
     item = {"kind": kind, "document_id": field(kind + "-1"),
             "supplier_id": field("supplier-1"), "currency": field("USD"),
             "requires_human_review": False, "lines": [line]}
+    if kind in ("grn", "invoice"):
+        item["po_reference"] = field("po-1")
+    if kind == "invoice":
+        item["grn_reference"] = field("grn-1")
     if kind == "invoice":
         item["stated_total"] = field(total or str(int(qty) * int(price)))
         item["has_other_charges"] = False
@@ -147,6 +151,18 @@ class AuditTests(unittest.TestCase):
         second = copy.deepcopy(self.grn["lines"][0])
         second["sku"]["value"] = "SKU-2"
         self.grn["lines"].append(second)
+        self.check(UNVERIFIABLE)
+
+    def test_wrong_po_reference(self):
+        self.inv["po_reference"]["value"] = "po-2"
+        self.check(UNVERIFIABLE)
+
+    def test_wrong_grn_reference(self):
+        self.inv["grn_reference"]["value"] = "grn-2"
+        self.check(UNVERIFIABLE)
+
+    def test_reference_without_evidence(self):
+        self.grn["po_reference"]["verification"] = "provisional"
         self.check(UNVERIFIABLE)
 
     def test_no_rounded_float(self):
