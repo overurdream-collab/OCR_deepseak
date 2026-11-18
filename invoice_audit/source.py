@@ -48,6 +48,15 @@ def parse_structured_json(raw: bytes, expected_kind: str) -> dict:
         raise ValueError("invalid UTF-8 JSON") from exc
     if not isinstance(doc, dict) or doc.get("kind") != expected_kind:
         raise ValueError("wrong document kind")
+    allowed = {"kind", "document_id", "supplier_id", "currency", "lines"}
+    if expected_kind == "invoice":
+        allowed |= {"stated_total", "has_other_charges", "single_invoice_scope"}
+    elif expected_kind == "po":
+        allowed.add("single_po_scope")
+    else:
+        allowed.add("complete_receipt_scope")
+    if set(doc) - allowed:
+        raise ValueError("unsupported top-level fields; cannot silently ignore")
     digest = hashlib.sha256(raw).hexdigest()
     output = {"kind": expected_kind, "requires_human_review": False}
     for key in ("document_id", "supplier_id", "currency"):
@@ -65,6 +74,8 @@ def parse_structured_json(raw: bytes, expected_kind: str) -> dict:
             keys.append("unit_price")
         if expected_kind == "invoice":
             keys.append("line_total")
+        if set(line) - set(keys):
+            raise ValueError("unsupported line fields; cannot silently ignore")
         for key in keys:
             row[key] = _wrap(line.get(key), digest, "lines", index, key)
         output["lines"].append(row)
