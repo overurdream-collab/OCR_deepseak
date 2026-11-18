@@ -55,12 +55,20 @@ def parse_structured_json(raw: bytes, expected_kind: str) -> dict:
         allowed.add("single_po_scope")
     else:
         allowed.add("complete_receipt_scope")
+    if expected_kind in ("grn", "invoice"):
+        allowed.add("po_reference")
+    if expected_kind == "invoice":
+        allowed.add("grn_reference")
     if set(doc) - allowed:
         raise ValueError("unsupported top-level fields; cannot silently ignore")
     digest = hashlib.sha256(raw).hexdigest()
     output = {"kind": expected_kind, "requires_human_review": False}
     for key in ("document_id", "supplier_id", "currency"):
         output[key] = _wrap(doc.get(key), digest, key)
+    if expected_kind in ("grn", "invoice"):
+        output["po_reference"] = _wrap(doc.get("po_reference"), digest, "po_reference")
+    if expected_kind == "invoice":
+        output["grn_reference"] = _wrap(doc.get("grn_reference"), digest, "grn_reference")
     lines = doc.get("lines")
     if not isinstance(lines, list) or not 0 < len(lines) <= 1000:
         raise ValueError("must have 1 to 1000 lines")
