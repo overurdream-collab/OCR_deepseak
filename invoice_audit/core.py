@@ -18,7 +18,7 @@ CRITICAL = ("supplier_id", "currency", "document_id", "lines")
 def _decimal(value: Any, field: str) -> Decimal:
     if not isinstance(value, str) or not value or value.strip() != value:
         raise ValueError(f"{field}: must be a canonical decimal string (not float)")
-    if len(value) > 32 or not re.fullmatch(r"-?(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,6})?", value):
+    if len(value) > 32 or not re.fullmatch(r"-?(?:0|[1-9][0-9]*)(?:\.[0-9]{1,6})?", value):
         raise ValueError(f"{field}: unsupported decimal precision or notation")
     try:
         parsed = Decimal(value)
