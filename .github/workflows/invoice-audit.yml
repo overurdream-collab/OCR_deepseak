@@ -5,6 +5,7 @@ on:
     paths:
       - 'invoice_audit/**'
       - 'tests/test_invoice_audit*.py'
+      - 'examples/invoice_audit/**'
       - '.github/workflows/invoice-audit.yml'
   push:
     branches: [main]
@@ -28,3 +29,8 @@ jobs:
           python-version: '3.11'
       - name: Run isolated invoice audit tests (no OCR dependencies)
         run: python -m unittest tests.test_invoice_audit tests.test_invoice_audit_source tests.test_invoice_audit_mdia_bridge tests.test_invoice_audit_attestation -v
+      - name: Verify runnable three-way supplier discrepancy example
+        shell: bash
+        run: |
+          python -m invoice_audit.cli structured --po examples/invoice_audit/po.json --grn examples/invoice_audit/grn.json --invoice examples/invoice_audit/invoice.json > audit-example.json
+          python -c 'import json; r=json.load(open("audit-example.json")); assert r["status"] == "VERIFIED_EXCEPTION" and r["approval"] is False; assert {"QTY_OVER_RECEIVED","UNIT_PRICE_DIFFERENCE"} <= {x["rule"] for x in r["findings"]}'
