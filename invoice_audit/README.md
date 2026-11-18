@@ -34,3 +34,15 @@ The module is independent of MDIA and does **not** connect to MDIA's raw OCR out
 4. Re-run independent holdout datasets; verify accuracy and false-match rate with counts and denominators.
 
 No tests claimed passed until GitHub Actions returns a recorded result for this branch SHA.
+
+## Running the end-to-end proof of concept
+```bash
+python -m invoice_audit.cli structured --po examples/invoice_audit/po.json --grn examples/invoice_audit/grn.json --invoice examples/invoice_audit/invoice.json
+python -m invoice_audit.cli mdia-review --pdf original.pdf --result mdia-result.json
+```
+
+The MDIA bridge checks the original PDF bytes against the MDIA report hash, compares page and matched evidence text, and outputs a **manual-review queue only**. It never treats MDIA's `auto_verified` as financial approval. It does not promote OCR data into the structured three-way matching contract.
+
+`invoice_audit.attestation.audit_attested_sources(...)` adds role-scoped HMAC verification of PO, receipt and invoice bytes using independently provisioned secrets. This proves integrity against holders of the provisioned keys **only**. It is not PKI, an official tax e-invoice signature, physical stock receipt proof, approval or an ERP integration. Do not use passwords as signing keys or expose signing secrets to document uploaders.
+
+Operational policy: **No invoice may be paid on the basis of this tool**. Operators must separately verify supplier identity, receipt authenticity and contractual terms; full custody, access control and tested business rules are still needed.
