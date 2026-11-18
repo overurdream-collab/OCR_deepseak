@@ -4,13 +4,13 @@ on:
   pull_request:
     paths:
       - 'invoice_audit/**'
-      - 'tests/test_invoice_audit.py'
+      - 'tests/test_invoice_audit*.py'
       - '.github/workflows/invoice-audit.yml'
   push:
     branches: [main]
     paths:
       - 'invoice_audit/**'
-      - 'tests/test_invoice_audit.py'
+      - 'tests/test_invoice_audit*.py'
       - '.github/workflows/invoice-audit.yml'
   workflow_dispatch:
 
@@ -27,4 +27,4 @@ jobs:
         with:
           python-version: '3.11'
       - name: Run isolated invoice audit tests (no OCR dependencies)
-        run: python -m unittest tests.test_invoice_audit -v
+        run: python -m unittest tests.test_invoice_audit tests.test_invoice_audit_source -v
