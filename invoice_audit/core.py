@@ -6,6 +6,7 @@ numbers are strings; sources must be independently verified before matching.
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import re
 from typing import Any
 
 MATCH = "VERIFIED_MATCH"
@@ -17,6 +18,8 @@ CRITICAL = ("supplier_id", "currency", "document_id", "lines")
 def _decimal(value: Any, field: str) -> Decimal:
     if not isinstance(value, str) or not value or value.strip() != value:
         raise ValueError(f"{field}: must be a canonical decimal string (not float)")
+    if len(value) > 32 or not re.fullmatch(r"-?(?:0|[1-9][0-9]*)(?:\\.[0-9]{1,6})?", value):
+        raise ValueError(f"{field}: unsupported decimal precision or notation")
     try:
         parsed = Decimal(value)
     except InvalidOperation as exc:
@@ -149,6 +152,12 @@ def audit(po: dict, grn: dict, invoice: dict) -> dict:
                 "findings": [], "reasons": sorted(set(errors)),
                 "ruleset": "invoice-audit-v0.1"}
     findings = []
+    for key in sorted(set(order["lines"]) - set(receipt["lines"])):
+        findings.append({"rule": "ORDERED_NOT_RECEIVED", "sku": key[0],
+                         "message": "ordered item absent from receipt in declared complete scope"})
+    for key in sorted(set(order["lines"]) - set(bill["lines"])):
+        findings.append({"rule": "ORDERED_NOT_INVOICED", "sku": key[0],
+                         "message": "ordered item absent from invoice in declared full scope"})
     calculated_total = Decimal("0")
     for key in sorted(set(receipt["lines"]) - set(bill["lines"])):
         findings.append({"rule": "RECEIVED_NOT_INVOICED", "sku": key[0],
