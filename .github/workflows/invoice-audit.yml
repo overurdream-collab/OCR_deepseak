@@ -27,8 +27,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install Excel parser
+        run: python -m pip install 'openpyxl>=3.1,<4'
       - name: Run isolated invoice audit tests (no OCR dependencies)
-        run: python -m unittest tests.test_invoice_audit tests.test_invoice_audit_source tests.test_invoice_audit_mdia_bridge tests.test_invoice_audit_attestation -v
+        run: python -m unittest tests.test_invoice_audit tests.test_invoice_audit_source tests.test_invoice_audit_mdia_bridge tests.test_invoice_audit_attestation tests.test_invoice_audit_xlsx -v
       - name: Verify runnable three-way supplier discrepancy example
         shell: bash
         run: |
