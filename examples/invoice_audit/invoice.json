@@ -1,0 +1,27 @@
+{
+  "kind": "invoice",
+  "document_id": "INV-887",
+  "supplier_id": "SUPPLIER-1",
+  "currency": "USD",
+  "po_reference": "PO-1042",
+  "grn_reference": "GRN-309",
+  "has_other_charges": false,
+  "single_invoice_scope": true,
+  "stated_total": "1150",
+  "lines": [
+    {
+      "sku": "CABLE-25",
+      "unit": "pcs",
+      "quantity": "100",
+      "unit_price": "5",
+      "line_total": "500"
+    },
+    {
+      "sku": "BREAKER-10",
+      "unit": "pcs",
+      "quantity": "50",
+      "unit_price": "13",
+      "line_total": "650"
+    }
+  ]
+}
