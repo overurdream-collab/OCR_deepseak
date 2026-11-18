@@ -136,6 +136,19 @@ class AuditTests(unittest.TestCase):
         self.grn["lines"][0]["quantity"]["value"] = "0"
         self.check(UNVERIFIABLE)
 
+    def test_under_received_quantity_in_full_scope(self):
+        self.inv["lines"][0]["quantity"]["value"] = "9"
+        self.inv["lines"][0]["line_total"]["value"] = "45"
+        self.inv["stated_total"]["value"] = "45"
+        self.assertIn("QTY_UNDER_RECEIVED",
+                      {f["rule"] for f in self.check(EXCEPTION)["findings"]})
+
+    def test_received_item_not_in_invoiced_lines(self):
+        second = copy.deepcopy(self.grn["lines"][0])
+        second["sku"]["value"] = "SKU-2"
+        self.grn["lines"].append(second)
+        self.check(UNVERIFIABLE)
+
     def test_no_rounded_float(self):
         self.po["lines"][0]["unit_price"]["value"] = "0.10"
         self.inv["lines"][0]["unit_price"]["value"] = "0.10"
