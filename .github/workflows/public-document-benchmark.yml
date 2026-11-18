@@ -1,0 +1,47 @@
+name: Public receipt OCR holdout (research)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/public_documents/**'
+      - '.github/workflows/public-document-benchmark.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  sroie-english-receipt-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local OCR runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng
+          python -m pip install 'Pillow>=10,<12' 'pytesseract>=0.3.10,<1'
+      - name: Download and evaluate 10 published test receipt images
+        run: |
+          python -m benchmarks.public_documents.sroie_benchmark --limit 10 --out results/sroie-10.json
+      - name: Verify coverage report and no financial authority claims
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('results/sroie-10.json'))
+          assert r['count']==10
+          assert r['financial_match_accuracy'] is None
+          assert r['invoice_line_accuracy'] is None
+          assert r['raw_ocr_total_token_found']+r['raw_ocr_total_token_missing']==10
+          print('Verified source documents:',r['count'],'OCR total token coverage:',r['raw_ocr_total_token_found'],'/',r['count'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-sroie-holdout-report
+          path: results/sroie-10.json
+          if-no-files-found: warn
+          retention-days: 14
