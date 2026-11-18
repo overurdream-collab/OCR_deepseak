@@ -11,9 +11,27 @@
       "license_reported": "CC-BY-4.0",
       "license_verified_from": "https://huggingface.co/datasets/jsdnrs/ICDAR2019-SROIE",
       "purpose": "ocr and key field extraction only; NOT linked PO/GRN audit",
-      "evaluation_fields": ["company", "date", "address", "total"],
+      "evaluation_fields": [
+        "company",
+        "date",
+        "address",
+        "total"
+      ],
       "training_restriction": "Only use test split; log any missing split/rows rather than substitute training rows",
       "status": "candidate_requires_runtime_download"
+    },
+    {
+      "id": "portuguese-original-invoices-receipts",
+      "title": "InvoicesReceiptsPT by Francisco Cruz",
+      "homepage": "https://huggingface.co/datasets/Francisco-Cruz/InvoicesReceiptsPT",
+      "api_dataset": "Francisco-Cruz/InvoicesReceiptsPT",
+      "type": "real_portuguese_invoice_and_receipt_images",
+      "count_reported": 1003,
+      "license_reported": "Apache-2.0 on Hugging Face dataset card; underlying image rights and privacy must be checked",
+      "purpose": "real-image OCR smoke; unpaired annotations not served by imagefolder viewer",
+      "status": "candidate_runtime_sample_no_field_ground_truth",
+      "split": "train_only",
+      "holdout": false
     },
     {
       "id": "zenodo-6371710",
