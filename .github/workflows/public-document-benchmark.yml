@@ -7,6 +7,10 @@ on:
       - 'benchmarks/public_documents/**'
       - '.github/workflows/public-document-benchmark.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
