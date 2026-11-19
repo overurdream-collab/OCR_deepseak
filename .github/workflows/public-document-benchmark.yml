@@ -39,10 +39,13 @@ jobs:
           r=json.load(open('results/sroie-30.json'))
           assert r['count']==30
           assert r['financial_match_accuracy'] is None
+          assert r['finance_ready'] is False and r['payment_authorized'] is False
+          assert r['financial_field_acceptance'] in ('FAIL','REQUIRES_INDEPENDENT_REVIEW')
           c=r['field_selection_outcomes']
           assert sum(c.values())==30
           assert c['correct']+c['wrong']+c['abstained']+c['invalid_reference']==30
           print('Field selection outcomes:',c)
+          print('Financial field acceptance gate:',r['financial_field_acceptance'])
           for item in r['results']:
             if item['total_field_selection'] in ('wrong','invalid_reference'):
               print('Review row',item['row_idx'],
