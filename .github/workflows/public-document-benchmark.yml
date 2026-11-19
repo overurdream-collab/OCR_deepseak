@@ -43,6 +43,13 @@ jobs:
           assert sum(c.values())==30
           assert c['correct']+c['wrong']+c['abstained']+c['invalid_reference']==30
           print('Field selection outcomes:',c)
+          for item in r['results']:
+            if item['total_field_selection'] in ('wrong','invalid_reference'):
+              print('Review row',item['row_idx'],
+                    'result',item['total_field_selection'],
+                    'reference',repr(item['annotated_total']),
+                    'selected',repr(item.get('selected_total')),
+                    'line_id',repr(item.get('selected_line_id')))
           assert r['invoice_line_accuracy'] is None
           assert r['raw_ocr_total_token_found']+r['raw_ocr_total_token_missing']==30
           print('Verified source documents:',r['count'],'OCR total token coverage:',r['raw_ocr_total_token_found'],'/',r['count'])
