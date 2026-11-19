@@ -44,6 +44,13 @@ class FieldSelectionTests(unittest.TestCase):
         answer = select_total([line("GRAND TOTAL RM 1,250.00")])
         self.assertEqual(evaluate_selected(answer, "1250.00"), "correct")
 
+    def test_ambiguous_integer_total_abstains(self):
+        self.assertEqual(select_total([line("TOTAL 2")])["status"], "abstain")
+
+    def test_dollar_ground_truth_supported(self):
+        choice = select_total([line("TOTAL $8.20")])
+        self.assertEqual(evaluate_selected(choice, "$8.20"), "correct")
+
     def test_tesseract_line_location(self):
         data = {"text": ["TOTAL", "31.00", "OTHER"],
                 "block_num": [1, 1, 2], "par_num": [1, 1, 1],
