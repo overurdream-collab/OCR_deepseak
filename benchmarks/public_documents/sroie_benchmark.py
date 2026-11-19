@@ -151,6 +151,9 @@ def main():
         "field_selection_accuracy_over_all_rows": outcome_counts["correct"] / len(results),
         "field_selection_error_over_all_rows": outcome_counts["wrong"] / len(results),
         "field_selection_coverage": (outcome_counts["correct"] + outcome_counts["wrong"]) / len(results),
+        "financial_field_acceptance": "FAIL" if outcome_counts["wrong"] or outcome_counts["abstained"] or outcome_counts["invalid_reference"] else "REQUIRES_INDEPENDENT_REVIEW",
+        "finance_ready": False,
+        "payment_authorized": False,
         "field_evaluation": "strict single-total-line selection with abstention, not authenticated invoice approval",
         "results": results, "financial_match_accuracy": None,
         "invoice_line_accuracy": None, "issuer_authenticity": "not_tested",
@@ -160,6 +163,7 @@ def main():
     args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"SROIE TEST holdout, {len(results)} real receipts: raw OCR total visible {successes}/{len(results)}")
     print("Conservative total-field selection:", outcome_counts)
+    print("Financial-field acceptance:", report["financial_field_acceptance"], "(no payment authority)")
     print("NOT a three-way matching or business authenticity benchmark.")
 
 
