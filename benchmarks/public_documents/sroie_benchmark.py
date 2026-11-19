@@ -55,6 +55,8 @@ def read_image_from_row(image):
 def norm_amount(value):
     """Parse ONE printed money token, never concatenate the whole OCR page."""
     token = str(value).strip().replace(" ", "")
+    if token.startswith("$"):
+        token = token[1:]
     if not re.fullmatch(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]{1,2})?|[0-9]+(?:\.[0-9]{1,2})?", token):
         return None
     try:
