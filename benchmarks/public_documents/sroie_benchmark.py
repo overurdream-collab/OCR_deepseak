@@ -95,6 +95,8 @@ def main():
         parser.error("limit must be between 1 and 30")
     from PIL import Image, ImageOps
     import pytesseract
+    from pytesseract import Output
+    from .field_selector import tess_lines, select_total, evaluate_selected
     config, split = split_info()
     rows = request_json(API + "/rows?" + urlencode({
         "dataset": DATASET, "config": config, "split": split,
@@ -109,21 +111,33 @@ def main():
         original = read_image_from_row(row.get("image"))
         with Image.open(BytesIO(original)) as im:
             im = ImageOps.exif_transpose(im).convert("RGB")
-            text = pytesseract.image_to_string(im, lang="eng", config="--psm 6")
+            data = pytesseract.image_to_data(im, lang="eng", config="--psm 6", output_type=Output.DICT)
+            lines = tess_lines(data)
+            text = "\n".join(line["text"] for line in lines)
+            selected = select_total(lines)
         entities = row.get("entities") or {}
         total = entities.get("total") if isinstance(entities, dict) else None
         if not isinstance(total, (str, int, float)) or not str(total).strip():
             raise ValueError(f"row {idx}: no annotated total")
         observed = total_token_present(text, total)
+        field_outcome = evaluate_selected(selected, total)
         results.append({
             "row_idx": idx,
             "image_sha256": hashlib.sha256(original).hexdigest(),
             "annotated_total": str(total),
             "raw_ocr_contains_label_total": observed,
+            "total_field_selection": field_outcome,
+            "selected_total": selected.get("value") if selected["status"] == "candidate" else None,
+            "selected_line_id": selected.get("line_id"),
+            "selected_line_bbox": selected.get("bbox"),
+            "total_field_status": selected["status"],
+            "total_field_reason": selected.get("reason"),
             "ocr_chars": len(text),
             "ocr_engine": "tesseract/eng/psm6",
         })
     successes = sum(r["raw_ocr_contains_label_total"] for r in results)
+    outcome_counts = {outcome: sum(r["total_field_selection"] == outcome for r in results)
+                      for outcome in ("correct", "wrong", "abstained", "invalid_reference")}
     report = {
         "dataset": DATASET, "dataset_split": split, "dataset_config": config,
         "kind": "real_receipt_images_not_supplier_po_grn",
@@ -131,6 +145,11 @@ def main():
         "count": len(results), "raw_ocr_total_token_found": successes,
         "raw_ocr_total_token_missing": len(results) - successes,
         "total_token_occurrence_rate": successes / len(results),
+        "field_selection_outcomes": outcome_counts,
+        "field_selection_accuracy_over_all_rows": outcome_counts["correct"] / len(results),
+        "field_selection_error_over_all_rows": outcome_counts["wrong"] / len(results),
+        "field_selection_coverage": (outcome_counts["correct"] + outcome_counts["wrong"]) / len(results),
+        "field_evaluation": "strict single-total-line selection with abstention, not authenticated invoice approval",
         "results": results, "financial_match_accuracy": None,
         "invoice_line_accuracy": None, "issuer_authenticity": "not_tested",
         "license": "CC-BY-4.0", "run_timestamp_unix": int(time.time()),
@@ -138,6 +157,7 @@ def main():
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"SROIE TEST holdout, {len(results)} real receipts: raw OCR total visible {successes}/{len(results)}")
+    print("Conservative total-field selection:", outcome_counts)
     print("NOT a three-way matching or business authenticity benchmark.")
 
 
