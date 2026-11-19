@@ -1,0 +1,56 @@
+name: Experimental PaddleOCR vs Tesseract real receipt comparison
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/public_documents/paddle_compare.py'
+      - '.github/workflows/paddle-receipt-comparison.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  paddle-cpu-field-comparison:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install independent OCR engines (CPU research only)
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng
+          python -m pip install 'Pillow>=10,<12' 'pytesseract>=0.3.10,<1' 'numpy>=1.26,<2.3'
+          python -m pip install 'paddlepaddle==3.2.2' 'paddleocr>=3.2,<4'
+      - name: Run fixed test rows through both OCR engines
+        env:
+          PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK: 'True'
+        run: |
+          python -m benchmarks.public_documents.paddle_compare --limit 5 --out results/paddle-vs-tess-5.json
+      - name: Validate independent error denominators
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('results/paddle-vs-tess-5.json'))
+          assert r['sample_count']==5 and r['financial_approval'] is False
+          assert r['deepseek_tested'] is False
+          for name in ('tesseract','paddleocr'):
+            assert sum(r['engines'][name].values())==5, r
+          print('Five identical real test receipts:',r['engines'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: paddle-tesseract-real-receipt-fields
+          path: results/paddle-vs-tess-5.json
+          retention-days: 14
+          if-no-files-found: warn

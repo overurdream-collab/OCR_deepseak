@@ -1,0 +1,87 @@
+name: Public receipt OCR holdout (research)
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/public_documents/**'
+      - '.github/workflows/public-document-benchmark.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sroie-english-receipt-holdout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install local OCR runtime
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-eng
+          python -m pip install 'Pillow>=10,<12' 'pytesseract>=0.3.10,<1'
+      - name: Verify OCR amount metric cannot invent matches
+        run: python -m unittest tests.test_public_benchmark_metric tests.test_public_field_selector -v
+      - name: Download and evaluate 30 published test receipt images
+        run: |
+          python -m benchmarks.public_documents.sroie_benchmark --limit 30 --out results/sroie-30.json
+      - name: Evaluate untouched 50 receipt test images (rows 30-79)
+        run: |
+          python -m benchmarks.public_documents.sroie_benchmark --offset 30 --limit 50 --out results/sroie-independent-50.json
+      - name: Sample 5 original Portuguese invoice or receipt images
+        run: |
+          python -m benchmarks.public_documents.portuguese_sample --limit 5 --out results/portuguese-5.json
+      - name: Verify coverage report and no financial authority claims
+        run: |
+          python - <<'PY'
+          import json
+          r=json.load(open('results/sroie-30.json'))
+          assert r['count']==30
+          assert r['financial_match_accuracy'] is None
+          assert r['finance_ready'] is False and r['payment_authorized'] is False
+          assert r['financial_field_acceptance'] in ('FAIL','REQUIRES_INDEPENDENT_REVIEW')
+          c=r['field_selection_outcomes']
+          assert sum(c.values())==30
+          assert c['correct']+c['wrong']+c['abstained']+c['invalid_reference']==30
+          print('Field selection outcomes:',c)
+          print('Financial field acceptance gate:',r['financial_field_acceptance'])
+          for item in r['results']:
+            if item['total_field_selection'] in ('wrong','invalid_reference'):
+              print('Review row',item['row_idx'],
+                    'result',item['total_field_selection'],
+                    'reference',repr(item['annotated_total']),
+                    'selected',repr(item.get('selected_total')),
+                    'line_id',repr(item.get('selected_line_id')))
+          assert r['invoice_line_accuracy'] is None
+          assert r['raw_ocr_total_token_found']+r['raw_ocr_total_token_missing']==30
+          print('Verified source documents:',r['count'],'OCR total token coverage:',r['raw_ocr_total_token_found'],'/',r['count'])
+          holdout=json.load(open('results/sroie-independent-50.json'))
+          assert holdout['count']==50 and holdout['independent_holdout'] is True
+          assert holdout['row_offset']==30
+          hc=holdout['field_selection_outcomes']
+          assert sum(hc.values())==50
+          assert holdout['finance_ready'] is False and holdout['payment_authorized'] is False
+          print('Independent 50 image total-field selection:',hc,
+                'financial gate:',holdout['financial_field_acceptance'])
+          p=json.load(open('results/portuguese-5.json'))
+          assert p['count']==5 and p['field_accuracy'] is None and p['financial_approval'] is False
+          print('Portuguese real images inspected:',p['count'],'with nonempty OCR:',p['ocr_nonempty_count'])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: public-sroie-holdout-report
+          path: |
+            results/sroie-30.json
+            results/sroie-independent-50.json
+            results/portuguese-5.json
+          if-no-files-found: warn
+          retention-days: 14

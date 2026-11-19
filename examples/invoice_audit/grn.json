@@ -1,0 +1,20 @@
+{
+  "kind": "grn",
+  "document_id": "GRN-309",
+  "supplier_id": "SUPPLIER-1",
+  "currency": "USD",
+  "po_reference": "PO-1042",
+  "complete_receipt_scope": true,
+  "lines": [
+    {
+      "sku": "CABLE-25",
+      "unit": "pcs",
+      "quantity": "90"
+    },
+    {
+      "sku": "BREAKER-10",
+      "unit": "pcs",
+      "quantity": "50"
+    }
+  ]
+}

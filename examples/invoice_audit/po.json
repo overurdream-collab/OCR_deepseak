@@ -1,0 +1,21 @@
+{
+  "kind": "po",
+  "document_id": "PO-1042",
+  "supplier_id": "SUPPLIER-1",
+  "currency": "USD",
+  "single_po_scope": true,
+  "lines": [
+    {
+      "sku": "CABLE-25",
+      "unit": "pcs",
+      "quantity": "100",
+      "unit_price": "5"
+    },
+    {
+      "sku": "BREAKER-10",
+      "unit": "pcs",
+      "quantity": "50",
+      "unit_price": "12"
+    }
+  ]
+}
