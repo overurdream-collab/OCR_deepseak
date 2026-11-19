@@ -21,16 +21,29 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 
 DATASET = "jsdnrs/ICDAR2019-SROIE"
 API = "https://datasets-server.huggingface.co"
 MAX_IMAGE_BYTES = 6_000_000
 
 
+def _get_with_retry(url: str, *, max_bytes: int | None = None):
+    """Retry transient public dataset gateway failures; never invent test rows."""
+    for attempt in range(4):
+        try:
+            with urlopen(Request(url, headers={"User-Agent": "MDIA-public-benchmark/1.0"}),
+                         timeout=40) as response:
+                return response.read(max_bytes + 1 if max_bytes is not None else 8_000_001)
+        except (HTTPError, URLError, TimeoutError) as exc:
+            transient = not isinstance(exc, HTTPError) or exc.code in (429, 500, 502, 503, 504)
+            if not transient or attempt == 3:
+                raise
+            time.sleep(min(2 ** attempt, 8))
+
+
 def request_json(url: str):
-    with urlopen(Request(url, headers={"User-Agent": "MDIA-public-benchmark/1.0"}),
-                 timeout=40) as response:
-        return json.load(response)
+    return json.loads(_get_with_retry(url).decode("utf-8"))
 
 
 def read_image_from_row(image):
@@ -42,9 +55,7 @@ def read_image_from_row(image):
     if src.startswith("data:image/") and ";base64," in src:
         data = base64.b64decode(src.split(";base64,", 1)[1], validate=True)
     elif src.startswith("https://huggingface.co/") or src.startswith("https://datasets-server.huggingface.co/"):
-        with urlopen(Request(src, headers={"User-Agent": "MDIA-public-benchmark/1.0"}),
-                     timeout=40) as response:
-            data = response.read(MAX_IMAGE_BYTES + 1)
+        data = _get_with_retry(src, max_bytes=MAX_IMAGE_BYTES)
     else:
         raise ValueError("image src is not on allowlisted HTTPS host or base64 image")
     if not data or len(data) > MAX_IMAGE_BYTES:
