@@ -102,10 +102,11 @@ def split_info():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--offset", type=int, default=0, help="fixed test-split start row; >=30 for untouched holdout")
     parser.add_argument("--out", type=Path, default=Path("benchmark-public-report.json"))
     args = parser.parse_args()
-    if not 1 <= args.limit <= 30:
-        parser.error("limit must be between 1 and 30")
+    if not 1 <= args.limit <= 100 or args.offset < 0:
+        parser.error("limit must be 1..100 and offset >= 0")
     from PIL import Image, ImageOps
     import pytesseract
     from pytesseract import Output
@@ -113,7 +114,7 @@ def main():
     config, split = split_info()
     rows = request_json(API + "/rows?" + urlencode({
         "dataset": DATASET, "config": config, "split": split,
-        "offset": 0, "length": args.limit,
+        "offset": args.offset, "length": args.limit,
     })).get("rows", [])
     if len(rows) != args.limit:
         raise RuntimeError(f"expected {args.limit} test rows, got {len(rows)}")
@@ -153,6 +154,8 @@ def main():
                       for outcome in ("correct", "wrong", "abstained", "invalid_reference")}
     report = {
         "dataset": DATASET, "dataset_split": split, "dataset_config": config,
+        "row_offset": args.offset,
+        "independent_holdout": args.offset >= 30,
         "kind": "real_receipt_images_not_supplier_po_grn",
         "evaluation": "raw_ocr_total_token_occurrence_only_not_financial_audit",
         "count": len(results), "raw_ocr_total_token_found": successes,
@@ -172,7 +175,7 @@ def main():
     }
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(f"SROIE TEST holdout, {len(results)} real receipts: raw OCR total visible {successes}/{len(results)}")
+    print(f"SROIE TEST rows offset={args.offset}, count={len(results)}: raw OCR total visible {successes}/{len(results)}")
     print("Conservative total-field selection:", outcome_counts)
     print("Financial-field acceptance:", report["financial_field_acceptance"], "(no payment authority)")
     print("NOT a three-way matching or business authenticity benchmark.")
