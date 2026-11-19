@@ -38,6 +38,10 @@ def select_total(lines):
         amounts = [match.group(0) for match in AMOUNT_TOKEN.finditer(tail)]
         if len(amounts) != 1:
             continue
+        # Conservative baseline: isolated integers might be item counts, not money.
+        # For formats without explicit decimal cents, abstain and request review.
+        if not re.search(r"\.\d{2}$", amounts[0]):
+            continue
         amount = norm_amount(amounts[0])
         if amount is None:
             continue
