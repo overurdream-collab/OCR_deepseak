@@ -59,7 +59,8 @@ def main():
     from paddleocr import PaddleOCR
 
     engine = PaddleOCR(lang="en", use_doc_orientation_classify=False,
-                       use_doc_unwarping=False, use_textline_orientation=False)
+                       use_doc_unwarping=False, use_textline_orientation=False,
+                       enable_mkldnn=False)
     config, split = split_info()
     rows = request_json(API + "/rows?" + urlencode({
         "dataset": DATASET, "config": config, "split": split,
